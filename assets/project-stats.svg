@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="300" viewBox="0 0 1200 300" role="img" aria-label="Omni Skills Forge: 140,122 npm downloads, 50,009 skill files, 28 categories">
+<rect x="1" y="1" width="1198" height="298" rx="18" fill="#0b1223" stroke="#344967"/><path d="M34 34H100" stroke="#eab66e" stroke-width="4"/>
+<g font-family="Segoe UI,Arial,sans-serif"><text x="34" y="72" fill="#f0f5ff" font-size="29" font-weight="650">Omni Skills Forge</text><text x="1166" y="70" text-anchor="end" fill="#7dd3fc" font-size="16">140K+ DOWNLOADS ON NPM</text>
+<path d="M411 108V218M806 108V218" stroke="#344967"/>
+<text x="34" y="165" fill="#eab66e" font-size="55" font-weight="700">140,122</text><text x="34" y="204" fill="#c5d4e8" font-size="19">Total npm downloads</text>
+<text x="446" y="165" fill="#7dd3fc" font-size="55" font-weight="700">50,009</text><text x="446" y="204" fill="#c5d4e8" font-size="19">Markdown skill files</text>
+<text x="846" y="165" fill="#f0f5ff" font-size="55" font-weight="700">28</text><text x="846" y="204" fill="#c5d4e8" font-size="19">Category paths</text>
+<path d="M34 237H1166" stroke="#26354b"/><text x="34" y="273" fill="#9eb4d3" font-size="15">Downloads through 2026-11-12 · Catalog from repository · Refreshes daily</text><text x="1166" y="273" text-anchor="end" fill="#7dd3fc" font-size="15">EXPLORE PROJECT ↗</text></g></svg>

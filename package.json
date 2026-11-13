@@ -1,7 +1,7 @@
 {
   "name": "omni-skills-forge",
-  "version": "2.1.1",
-  "description": "50,000+ expert AI agent skills for Claude Code, Kilo, Cline, Opencode, Cursor & Windsurf — visual dashboard, single-click install, doctor, export",
+  "version": "2.1.2",
+  "description": "50,009 Markdown skill files across 28 categories, with search, a local dashboard, installation, diagnostics and export tools.",
   "main": "src/index.js",
   "bin": {
     "omni-skills-forge": "bin/cli.js",
@@ -21,7 +21,9 @@
     "registry/",
     "scripts/build-registry.js",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "assets/",
+    "docs/"
   ],
   "keywords": [
     "ai",
@@ -45,12 +47,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/theihtisham/omni-skills-forge.git"
+    "url": "git+https://github.com/theihtishaam/omni-skills-forge.git"
   },
   "bugs": {
-    "url": "https://github.com/theihtisham/omni-skills-forge/issues"
+    "url": "https://github.com/theihtishaam/omni-skills-forge/issues"
   },
-  "homepage": "https://github.com/theihtisham/omni-skills-forge#readme",
+  "homepage": "https://github.com/theihtishaam/omni-skills-forge#readme",
   "engines": {
     "node": ">=18.0.0"
   },

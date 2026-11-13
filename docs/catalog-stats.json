@@ -1,0 +1,16 @@
+{
+  "skillFiles": 50009,
+  "registryEntries": 50009,
+  "distinctNames": 12506,
+  "categoryPaths": 28,
+  "installerTargets": 6,
+  "families": {
+    "ai-ml": 8642,
+    "backend": 12962,
+    "cloud": 5681,
+    "database": 2481,
+    "devops": 8241,
+    "web-dev": 12002
+  },
+  "refreshedAt": "2026-11-13T11:25:51.285Z"
+}

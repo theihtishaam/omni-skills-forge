@@ -1,0 +1,10 @@
+{
+  "package": "omni-skills-forge",
+  "version": "2.1.1",
+  "source": "https://registry.npmjs.org/omni-skills-forge/-/omni-skills-forge-2.1.1.tgz",
+  "integrity": "sha512-9D2bXMUOpkfEi8NFugoVsnz7SamzgqfO07b3AyXGt/laRBhHk7IGPWL2KRQcdTTjo95szQ8qZqouzQqBUhirdg==",
+  "files": 50020,
+  "unpackedBytes": 95692838,
+  "restoredCommit": "a93dbcd056d739c17c0d6f8ba36ca600dcaded2d",
+  "runtimeChanges": "Version metadata only; skills and registry preserved."
+}

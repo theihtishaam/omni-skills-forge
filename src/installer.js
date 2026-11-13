@@ -63,7 +63,7 @@ export class OmniInstaller {
       }
     };
     walkDir(this._skillsDir);
-    return { version: '2.1.1', totalSkills: skills.length, builtAt: new Date().toISOString(), categories: [...categories], skills };
+    return { version: '2.1.2', totalSkills: skills.length, builtAt: new Date().toISOString(), categories: [...categories], skills };
   }
 
   _parseFrontmatter(content) {
