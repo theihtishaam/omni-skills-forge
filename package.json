@@ -1,6 +1,6 @@
 {
   "name": "omni-skills-forge",
-  "version": "2.1.2",
+  "version": "2.1.3",
   "description": "50,009 Markdown skill files across 28 categories, with search, a local dashboard, installation, diagnostics and export tools.",
   "main": "src/index.js",
   "bin": {

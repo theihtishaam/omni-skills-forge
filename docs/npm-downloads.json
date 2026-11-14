@@ -1,17 +1,17 @@
 {
   "package": "omni-skills-forge",
-  "downloads": 140122,
+  "downloads": 140381,
   "milestone": "140K+",
   "coverageStart": "2026-04-12",
-  "coverageEnd": "2026-11-12",
+  "coverageEnd": "2026-11-13",
   "completeSinceCreation": true,
-  "refreshedAt": "2026-11-13T11:26:43.483Z",
+  "refreshedAt": "2026-11-14T11:49:14.781Z",
   "source": "https://api.npmjs.org/downloads/point/",
   "receipts": [
     {
-      "downloads": 140122,
+      "downloads": 140381,
       "start": "2026-04-12",
-      "end": "2026-11-12",
+      "end": "2026-11-13",
       "package": "omni-skills-forge"
     }
   ]

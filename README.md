@@ -10,9 +10,11 @@ Search a local catalog of Markdown instructions for coding agents, inspect the s
 
 [Quick start](#quick-start) · [All 28 category paths](docs/CATEGORIES.md) · [Installer targets](#installer-targets) · [CLI reference](#cli-reference) · [Source provenance](docs/PROVENANCE.md)
 
-[![Omni Skills Forge: automatic npm downloads, skill files, and category totals](https://raw.githubusercontent.com/theihtishaam/omni-skills-forge/main/assets/project-stats.svg)](https://www.npmjs.com/package/omni-skills-forge)
+<!-- NPM_TOTAL_START -->
+**Total npm downloads: 140,381** · Through **2026-11-13**. [npm data](https://api.npmjs.org/downloads/point/2026-04-12:2026-11-13/omni-skills-forge).
 
-This card refreshes daily from the public npm API and the repository catalog. [Download receipts](docs/npm-downloads.json) · [Catalog counts](docs/catalog-stats.json)
+GitHub refreshes this number daily. The npm README records the total when this version was published. Downloads include automated installs; they are not unique users.
+<!-- NPM_TOTAL_END -->
 
 ## Quick start
 
