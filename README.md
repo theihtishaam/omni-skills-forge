@@ -13,7 +13,7 @@ Search a local catalog of Markdown instructions for coding agents, inspect the s
 <!-- NPM_TOTAL_START -->
 **Total npm downloads: 140,381** · Through **2026-11-13**. [npm data](https://api.npmjs.org/downloads/point/2026-04-12:2026-11-13/omni-skills-forge).
 
-GitHub refreshes this number daily. The npm README records the total when this version was published. Downloads include automated installs; they are not unique users.
+GitHub refreshes this number every two days. The npm README records the total when this version was published. Downloads include automated installs; they are not unique users.
 <!-- NPM_TOTAL_END -->
 
 ## Quick start

@@ -45,7 +45,7 @@ if(!Number.isSafeInteger(downloads))throw Error('Invalid total');
 const milestone=downloads>=1e6?Math.floor(downloads/1e6)+'M+':downloads>=1000?Math.floor(downloads/1000)+'K+':String(downloads);
 const data={package:name,downloads,milestone,coverageStart:created,coverageEnd:latest.end,completeSinceCreation:true,refreshedAt:new Date().toISOString(),source:'https://api.npmjs.org/downloads/point/',receipts};
 const source=receipts.length===1?`https://api.npmjs.org/downloads/point/${created}:${latest.end}/${name}`:'https://github.com/theihtishaam/omni-skills-forge/blob/main/docs/npm-downloads.json';
-const plain=`**Total npm downloads: ${downloads.toLocaleString('en-US')}** · Through **${latest.end}**. [npm data](${source}).\n\nGitHub refreshes this number daily. The npm README records the total when this version was published. Downloads include automated installs; they are not unique users.`;
+const plain=`**Total npm downloads: ${downloads.toLocaleString('en-US')}** · Through **${latest.end}**. [npm data](${source}).\n\nGitHub refreshes this number every two days. The npm README records the total when this version was published. Downloads include automated installs; they are not unique users.`;
 const readme=await readFile(path.join(root,'README.md'),'utf8');
 if(!readme.includes('<!-- NPM_TOTAL_START -->')||!readme.includes('<!-- NPM_TOTAL_END -->'))throw Error('Missing README download markers');
 const updatedReadme=readme.replace(/<!-- NPM_TOTAL_START -->[\s\S]*?<!-- NPM_TOTAL_END -->/,'<!-- NPM_TOTAL_START -->\n'+plain+'\n<!-- NPM_TOTAL_END -->');
