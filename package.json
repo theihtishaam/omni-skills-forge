@@ -1,6 +1,6 @@
 {
   "name": "omni-skills-forge",
-  "version": "2.1.3",
+  "version": "2.1.4",
   "description": "50,009 Markdown skill files across 28 categories, with search, a local dashboard, installation, diagnostics and export tools.",
   "main": "src/index.js",
   "bin": {
@@ -43,7 +43,10 @@
     "ai-tools",
     "agentic"
   ],
-  "author": "Ihtisham <ihtisham@users.noreply.github.com>",
+  "author": {
+    "name": "Ihtisham (@theihtishaam)",
+    "url": "https://github.com/theihtishaam"
+  },
   "license": "MIT",
   "repository": {
     "type": "git",

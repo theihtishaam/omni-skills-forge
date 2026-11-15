@@ -2,6 +2,13 @@
 
 # Omni Skills Forge
 
+<a href="https://trendshift.io"><img src="https://img.shields.io/badge/Trendshift-Explore%20trending%20projects-6366f1?style=for-the-badge" alt="Explore trending projects on Trendshift" /></a>
+
+<a href="https://www.npmjs.com/package/omni-skills-forge"><img src="https://img.shields.io/npm/dt/omni-skills-forge?label=Total%20Downloads&amp;color=brightgreen" alt="Total npm downloads (all time)" /></a>
+<a href="https://github.com/theihtishaam/omni-skills-forge"><img src="https://img.shields.io/github/stars/theihtishaam/omni-skills-forge?label=Star%20on%20GitHub&amp;style=social" alt="Star omni-skills-forge on GitHub" /></a>
+
+Created by [Ihtisham (@theihtishaam)](https://github.com/theihtishaam). [Explore the source and star Omni Skills Forge](https://github.com/theihtishaam/omni-skills-forge).
+
 [![Follow Ihtisham on GitHub](https://img.shields.io/badge/Follow-Ihtisham%20Ahmad-7dd3fc?logo=github&logoColor=white&labelColor=111c32)](https://github.com/theihtishaam)
 [![npm version](https://img.shields.io/npm/v/omni-skills-forge?color=eab66e&logo=npm)](https://www.npmjs.com/package/omni-skills-forge)
 [![MIT license](https://img.shields.io/badge/license-MIT-7dd3fc)](LICENSE)
