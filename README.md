@@ -17,12 +17,6 @@ Search a local catalog of Markdown instructions for coding agents, inspect the s
 
 [Quick start](#quick-start) · [All 28 category paths](docs/CATEGORIES.md) · [Installer targets](#installer-targets) · [CLI reference](#cli-reference) · [Source provenance](docs/PROVENANCE.md)
 
-<!-- NPM_TOTAL_START -->
-**Total npm downloads: 140,381** · Through **2026-11-13**. [npm data](https://api.npmjs.org/downloads/point/2026-04-12:2026-11-13/omni-skills-forge).
-
-GitHub refreshes this number every two days. The npm README records the total when this version was published. Downloads include automated installs; they are not unique users.
-<!-- NPM_TOTAL_END -->
-
 ## Quick start
 
 Use Node.js 18 or later. Start with one skill and review the copied file before configuring your agent.
