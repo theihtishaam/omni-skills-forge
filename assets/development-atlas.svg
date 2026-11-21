@@ -1,0 +1,120 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="658" viewBox="0 0 1080 658" role="img" aria-labelledby="atlas-title atlas-description">
+  <title id="atlas-title">Development skill atlas</title>
+  <desc id="atlas-description">The catalog contains 50,009 Markdown skill files across 28 category paths. Backend, 12,962 files, covers REST API design and rate limiting. Web development, 12,002 files, covers React accessibility and form submission. AI and ML, 8,642 files, covers retrieval indexing and model evaluation. DevOps, 8,241 files, covers GitHub Actions and Kubernetes deployments. Cloud, 5,681 files, covers AWS IAM and Cloud Run. Database, 2,481 files, covers SQL indexing and MongoDB aggregation.</desc>
+  <!-- Counts are derived from the packaged registry/master-registry.json. Example sources are listed alongside each family below. -->
+  <defs>
+    <linearGradient id="atlas-background" x1="0" x2="1" y1="0" y2="1" gradientUnits="objectBoundingBox">
+      <stop stop-color="#14233b"/>
+      <stop offset="1" stop-color="#0b1526"/>
+    </linearGradient>
+    <style>
+      .family{fill:#f4f7ff;font-size:30px;font-weight:700}
+      .task{fill:#d7e4f3;font-size:23px;font-weight:450}
+      .count{fill:#ffcf8b;font-size:19px;font-weight:700;text-anchor:end}
+      .icon{fill:none;stroke:#93dcf2;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round}
+      .tile{fill:#172d47;stroke:#355473}
+      .guide{fill:none;stroke:#344b67;stroke-width:1}
+      .point{fill:#93dcf2}
+    </style>
+  </defs>
+
+  <rect x="1" y="1" width="1078" height="656" rx="20" fill="url(#atlas-background)" stroke="#3f5774" stroke-width="2"/>
+  <g font-family="Segoe UI, Arial, sans-serif">
+    <path d="M40 36H90" stroke="#eab66e" stroke-width="4" stroke-linecap="round"/>
+    <text x="40" y="82" fill="#f4f7ff" font-size="43" font-weight="730" letter-spacing="-.8">Development skill atlas</text>
+    <text x="1038" y="61" fill="#ffcf8b" font-size="25" font-weight="700" text-anchor="end">50,009 skill files</text>
+    <text x="1038" y="87" fill="#becfe4" font-size="19" text-anchor="end">28 category paths</text>
+    <path class="guide" d="M40 111H1040M540 130V627M40 288H1040M40 459H1040"/>
+
+    <!-- backend/nodejs/nodejs-rest-api-design-advanced-intermediate.md; backend/nodejs/nodejs-rate-limiting-advanced-intermediate.md -->
+    <g transform="translate(40 142)">
+      <rect class="tile" x="0" y="0" width="49" height="49" rx="10"/>
+      <g class="icon" aria-hidden="true">
+        <rect x="11" y="11" width="27" height="11" rx="2"/>
+        <rect x="11" y="27" width="27" height="11" rx="2"/>
+        <path d="M17 16.5h1m-1 16h1m7-16h7m-7 16h7"/>
+      </g>
+      <text class="family" x="66" y="32">Backend</text>
+      <text class="count" x="477" y="30">12,962 files</text>
+      <circle class="point" cx="69" cy="70" r="3.2"/>
+      <circle class="point" cx="69" cy="105" r="3.2"/>
+      <text class="task" x="82" y="77">Design REST APIs</text>
+      <text class="task" x="82" y="112">Add API rate limits</text>
+    </g>
+
+    <!-- web-dev/react/react-accessibility-a11y-advanced-intermediate.md; web-dev/react/react-form-handling-advanced-intermediate.md -->
+    <g transform="translate(564 142)">
+      <rect class="tile" x="0" y="0" width="49" height="49" rx="10"/>
+      <g class="icon" aria-hidden="true">
+        <rect x="10" y="11" width="29" height="27" rx="3"/>
+        <path d="M10 19h29m-19 5-4 4 4 4m9-8 4 4-4 4"/>
+      </g>
+      <text class="family" x="66" y="32">Web development</text>
+      <text class="count" x="474" y="30">12,002 files</text>
+      <circle class="point" cx="69" cy="70" r="3.2"/>
+      <circle class="point" cx="69" cy="105" r="3.2"/>
+      <text class="task" x="82" y="77">Make React forms accessible</text>
+      <text class="task" x="82" y="112">Handle React form submissions</text>
+    </g>
+
+    <!-- ai-ml/rag/rag-vector-indexing-advanced-intermediate.md; ai-ml/llm/llm-evaluation-metrics-advanced-intermediate.md -->
+    <g transform="translate(40 313)">
+      <rect class="tile" x="0" y="0" width="49" height="49" rx="10"/>
+      <g class="icon" aria-hidden="true">
+        <rect x="15" y="15" width="19" height="19" rx="3"/>
+        <path d="M20 9v6m9-6v6m-9 19v6m9-6v6M9 20h6m-6 9h6m19-9h6m-6 9h6m-18-5.5h5"/>
+      </g>
+      <text class="family" x="66" y="32">AI &amp; ML</text>
+      <text class="count" x="477" y="30">8,642 files</text>
+      <circle class="point" cx="69" cy="70" r="3.2"/>
+      <circle class="point" cx="69" cy="105" r="3.2"/>
+      <text class="task" x="82" y="77">Index vectors for retrieval</text>
+      <text class="task" x="82" y="112">Evaluate language models</text>
+    </g>
+
+    <!-- devops/cicd/cicd-github-actions-advanced-intermediate.md; devops/kubernetes/kubernetes-deployment-strategies-advanced-intermediate.md -->
+    <g transform="translate(564 313)">
+      <rect class="tile" x="0" y="0" width="49" height="49" rx="10"/>
+      <g class="icon" aria-hidden="true">
+        <path d="M16 24.5h7m7 0h7m-12-7v-6m0 20v6"/>
+        <circle cx="12" cy="24.5" r="4"/>
+        <circle cx="25" cy="24.5" r="6"/>
+        <circle cx="39" cy="24.5" r="2"/>
+        <path d="M23 10h4m-4 29h4"/>
+      </g>
+      <text class="family" x="66" y="32">DevOps</text>
+      <text class="count" x="474" y="30">8,241 files</text>
+      <circle class="point" cx="69" cy="70" r="3.2"/>
+      <circle class="point" cx="69" cy="105" r="3.2"/>
+      <text class="task" x="82" y="77">Write GitHub Actions workflows</text>
+      <text class="task" x="82" y="112">Plan Kubernetes rollouts</text>
+    </g>
+
+    <!-- cloud/aws/aws-iam-security-advanced-intermediate.md; cloud/gcp/gcp-cloud-run-advanced-intermediate.md -->
+    <g transform="translate(40 484)">
+      <rect class="tile" x="0" y="0" width="49" height="49" rx="10"/>
+      <path class="icon" aria-hidden="true" d="M15 34a7 7 0 1 1 0-14c1-5 5-8 10-8 6 0 10 4 11 9 3 1 5 3 5 6a7 7 0 0 1-7 7z"/>
+      <text class="family" x="66" y="32">Cloud</text>
+      <text class="count" x="477" y="30">5,681 files</text>
+      <circle class="point" cx="69" cy="70" r="3.2"/>
+      <circle class="point" cx="69" cy="105" r="3.2"/>
+      <text class="task" x="82" y="77">Configure AWS IAM</text>
+      <text class="task" x="82" y="112">Deploy to Cloud Run</text>
+    </g>
+
+    <!-- database/sql/sql-indexing-strategies-advanced-intermediate.md; database/nosql/nosql-mongodb-aggregation-advanced-intermediate.md -->
+    <g transform="translate(564 484)">
+      <rect class="tile" x="0" y="0" width="49" height="49" rx="10"/>
+      <g class="icon" aria-hidden="true">
+        <ellipse cx="24.5" cy="15" rx="13" ry="5"/>
+        <path d="M11.5 15v19c0 3 6 5 13 5s13-2 13-5V15m-26 10c0 3 6 5 13 5s13-2 13-5"/>
+      </g>
+      <text class="family" x="66" y="32">Database</text>
+      <text class="count" x="474" y="30">2,481 files</text>
+      <circle class="point" cx="69" cy="70" r="3.2"/>
+      <circle class="point" cx="69" cy="105" r="3.2"/>
+      <text class="task" x="82" y="77">Choose SQL indexes</text>
+      <text class="task" x="82" y="112">Aggregate MongoDB data</text>
+    </g>
+  </g>
+</svg>

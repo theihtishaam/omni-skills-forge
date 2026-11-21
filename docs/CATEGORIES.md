@@ -87,4 +87,4 @@ Use `osf categories` to list the six families. Pass a family or exact path to `o
 
 The registry has **12,506 distinct names**. Inspect the file path and difficulty because names can repeat across variants.
 
-[Quick start](../README.md#quick-start) · [Source provenance](PROVENANCE.md)
+[Quick start](../README.md#open-it-in-your-project) · [Source provenance](PROVENANCE.md)

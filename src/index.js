@@ -22,5 +22,5 @@ export {
 } from './workspace-skills.js';
 export { exportWorkspaceSkillMarkdown } from './workspace-skill-export.js';
 export { makeWorkspaceSkill, MAX_MAKE_WORKSPACE_INSTRUCTION_LENGTH } from './make-workspace-skill.js';
-export const VERSION = '2.3.1';
+export const VERSION = '2.3.2';
 export const SUPPORTED_TOOLS = ['claude-code', 'kilo', 'cline', 'opencode', 'cursor', 'windsurf'];
