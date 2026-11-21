@@ -4,7 +4,7 @@ Open `osf dashboard` in the project. Its suggestions come from recognized projec
 
 For example, `osf disable --category devops/docker --agent codex --project .` switches Docker off for Codex in this project. Replace `disable` with `enable` to allow it again.
 
-Use the prompt hook to provide guidance automatically on a matching request. Connect via MCP to let the agent find guidance and make a skill on request. Pick one delivery route per host to avoid receiving the same guidance twice.
+Use the Codex or Claude Code prompt hook to provide guidance automatically. Start a message with “Make one skill for …” when you want Omni to save a new skill in the workspace. Other compatible agents can find and make skills through MCP. Pick one delivery route per host to avoid receiving the same guidance twice.
 
 ## Run automatically on a submitted prompt
 
@@ -29,7 +29,7 @@ Install the CLI with `npm install -g omni-skills-forge` and make sure `osf --ver
 }
 ```
 
-The hook uses the visible prompt and working directory supplied by the host. It emits the selected guidance for that turn and produces no output for an unrelated prompt or a directory outside the chosen project. Omni does not save the prompt or open native transcript files. Removing the entry stops future hook deliveries.
+The hook uses the prompt and working directory supplied by the host. An ordinary matching request receives guidance. An explicit skill-creation request saves the task instructions with the new workspace skill and returns its name. An unrelated request produces no guidance. Removing the hook entry stops future hook deliveries.
 
 ## Connect an agent over MCP
 

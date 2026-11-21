@@ -23,11 +23,19 @@ osf dashboard
 
 > Make one skill for reviewing keyboard accessibility and form submission in this React checkout.
 
-A connected agent can make the skill directly through Omni’s MCP tool. You can also type the same sentence in the dashboard. Omni combines eligible catalog guidance, shows which files it used, and lets you switch the saved skill off. If nothing matches, it asks for a more specific request. [Connect your agent](https://github.com/theihtishaam/omni-skills-forge/blob/v2.3.1/docs/TASK_SKILLS.md)
+With the Omni prompt hook connected in Codex or Claude Code, start a message with **“Make one skill for …”** and the new skill is saved in the workspace. A connected MCP agent can also call the maker directly. The same sentence works in the dashboard. If nothing matches, Omni asks for a more specific request. [Connect your agent](https://github.com/theihtishaam/omni-skills-forge/blob/v2.3.1/docs/TASK_SKILLS.md)
 
 ![One request made into a saved workspace skill with its source files](https://raw.githubusercontent.com/theihtishaam/omni-skills-forge/v2.3.1/assets/make-a-skill.png)
 
-Prefer the terminal? Run `osf make "Review keyboard accessibility and form submission in React"` from the project. [Browse all categories](https://github.com/theihtishaam/omni-skills-forge/blob/v2.3.1/docs/CATEGORIES.md) · [See the measured workspace example](https://github.com/theihtishaam/omni-skills-forge/blob/v2.3.1/docs/workspace-comparison.json)
+In the checkout example, Omni picked the React accessibility and form-handling guides and saved them as one skill. Repeating the request kept one copy. A later checkout review received the combined instructions. Turning off React stopped delivery on the next request.
+
+![Agent prompt workflow. Two catalog sources became one saved skill. A later matching prompt received it, and a repeated creation request kept one copy.](https://raw.githubusercontent.com/theihtishaam/omni-skills-forge/v2.3.1/assets/agent-skill-flow.png)
+
+The folder matters for ordinary requests too. “Review keyboard accessibility in this form” returned two guides in a React storefront and zero in an empty folder. A weather question in the same storefront also returned zero.
+
+![Measured chart of skills returned for the same task with and without a recognized workspace, plus an unrelated request](https://raw.githubusercontent.com/theihtishaam/omni-skills-forge/v2.3.1/assets/workspace-comparison.png)
+
+Prefer the terminal? Run `osf make "Review keyboard accessibility and form submission in React"` from the project. [Browse all categories](https://github.com/theihtishaam/omni-skills-forge/blob/v2.3.1/docs/CATEGORIES.md) · [Recorded example](https://github.com/theihtishaam/omni-skills-forge/blob/v2.3.1/docs/workspace-comparison.json) · [Reproduce the graphs](https://github.com/theihtishaam/omni-skills-forge/blob/v2.3.1/scripts/measure-workspace.mjs)
 
 **Exactwork Skills** helps with longer jobs that need a plan, a review, and a handoff to the next session. [Explore Exactwork Skills](https://github.com/theihtishaam/exactwork-skills)
 

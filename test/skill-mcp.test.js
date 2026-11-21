@@ -272,6 +272,24 @@ test('Omni MCP picks catalog sources for an explicit make request when paths are
   assert.ok(recipes[0].sourcePaths.length > 0);
   assert.ok(recipes[0].sourcePaths.every(source => source.startsWith('web-dev/react/')));
   assert.deepEqual(await listSkillDeliveries({ project }), []);
+
+  const recipe = recipes[0];
+  const virtualPath = `workspace/${recipe.id}.md`;
+  const followUp = 'Review React checkout keyboard navigation and form handling for accessibility';
+  const delivered = await runMcp(project, 'claude-code', [...baseline, call(2, { query: followUp, maxSkills: 1 })]);
+  assert.equal(delivered[1].result.content.length, 1);
+  assert.ok(delivered[1].result.content[0].text.includes(`Workspace recipe ${recipe.title}`));
+  const receipts = await listSkillDeliveries({ project, agent: 'claude-code' });
+  assert.equal(receipts.length, 1);
+  assert.equal(receipts[0].method, 'mcp');
+  assert.deepEqual(receipts[0].paths, [virtualPath]);
+
+  await setSkillSelectionState({ project, agent: 'claude-code', path: recipe.sourcePaths[0], status: 'disabled' });
+  const blocked = await runMcp(project, 'claude-code', [...baseline, call(2, { query: followUp, maxSkills: 1 })]);
+  assert.ok(blocked[1].result.content.every(({ text }) => !text.includes(`Workspace recipe ${recipe.title}`)));
+  const laterReceipts = await listSkillDeliveries({ project, agent: 'claude-code' });
+  assert.deepEqual(laterReceipts.filter(receipt => receipt.paths.includes(virtualPath)), receipts);
+  assert.deepEqual(await listWorkspaceSkills({ project }), { recipes, revision });
 });
 
 test('Omni MCP delivers selected guidance when local delivery recording is unavailable', async () => {

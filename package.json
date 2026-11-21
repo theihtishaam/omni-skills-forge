@@ -28,6 +28,7 @@
     "assets/*.svg",
     "assets/skills-dashboard.png",
     "assets/make-a-skill.png",
+    "assets/agent-skill-flow.png",
     "assets/workspace-comparison.png",
     "docs/"
   ],

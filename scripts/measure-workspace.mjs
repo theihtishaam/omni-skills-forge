@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import assert from 'node:assert/strict';
 import { recommendWorkspaceSkills, selectSkills, setSkillCategoryState } from '../src/skill-selection.js';
-import { makeWorkspaceSkill } from '../src/make-workspace-skill.js';
+import { listWorkspaceSkills } from '../src/workspace-skills.js';
 
 const run = promisify(execFile);
 const cli = fileURLToPath(new URL('../bin/cli.js', import.meta.url));
@@ -42,11 +42,16 @@ try {
   ];
   const useWhen = 'Review checkout keyboard accessibility and form submission';
   const instructions = 'Confirm that a failed checkout submission preserves the customer input.';
-  const made = await makeWorkspaceSkill({ project, directory: 'storefront', agent: 'codex',
-    instruction: 'Make one skill for reviewing keyboard accessibility and form submission in React checkout. ' + instructions });
-  assert.ok(made.created);
-  const title = made.recipe.title;
-  const sourcePaths = made.sources.map(source => source.path);
+  const request = 'Make one skill for reviewing keyboard accessibility and form submission in React checkout. ' + instructions;
+  const firstReply = await hookDelivery('storefront', request);
+  const first = await listWorkspaceSkills({ project });
+  assert.equal(first.recipes.length, 1);
+  const [{ title, sourcePaths }] = first.recipes;
+  assert.ok(firstReply.includes(title));
+  const secondReply = await hookDelivery('storefront', request);
+  assert.ok(secondReply.includes(title));
+  const repeat = await listWorkspaceSkills({ project });
+  assert.deepEqual(repeat, first);
   const options = { directory: 'storefront', agent: 'codex', project, query: useWhen, maxSkills: 1 };
   const recipe = await selectSkills(options);
   assert.equal(recipe.matches.length, 1);
@@ -60,7 +65,8 @@ try {
   await setSkillCategoryState({ project, agent: 'codex', category: 'web-dev/react', status: 'disabled' });
   const blocked = await hookDelivery('storefront', useWhen, 'codex', ['--max-skills', '1']);
   assert.ok(!blocked.includes(instructions));
-  const workspaceSkill = { title, sourcePaths, deliveredAs: recipe.matches.length,
+  const workspaceSkill = { title, sourcePaths, savedAfterFirstRequest: first.recipes.length,
+    savedAfterRepeat: repeat.recipes.length, deliveredAs: recipe.matches.length,
     guidanceReachedCodex: true, guidanceReachedClaude: false, guidanceReachedCodexAfterCategoryDisabled: false };
   console.log(JSON.stringify({ task, agent: 'codex', standbySuggestions: standby.suggestions.length, cases, workspaceSkill }, null, 2));
 } finally {
