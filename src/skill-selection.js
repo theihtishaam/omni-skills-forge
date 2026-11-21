@@ -82,13 +82,24 @@ function isSkillPath(value) {
     value.split('/').every(part => part && part !== '.' && part !== '..' && !/[\\:\0]/u.test(part));
 }
 
+function categoryFamily(category) {
+  return category.split('/', 1)[0];
+}
+
+function isCategoryKey(value) {
+  return typeof value === 'string' && /^[a-z][a-z0-9-]*(?:\/[a-z][a-z0-9-]*)*$/u.test(value);
+}
+
 async function loadCatalog() {
   catalog ??= readFile(catalogPath, 'utf8').then(JSON.parse).then(registry => {
     const skills = registry.skills.filter(skill => isSkillPath(skill.file));
+    const categories = registry.categories ?? [];
+    const families = [...new Set(categories.map(categoryFamily))].sort();
     return {
-      registry: { ...registry, skills },
+      registry: { ...registry, skills, families },
       byPath: new Map(skills.map(skill => [skill.file, skill])),
-      technologies: new Set([...technologyNames, ...(registry.categories ?? []).flatMap(category =>
+      categoryKeys: new Set([...categories, ...families]),
+      technologies: new Set([...technologyNames, ...categories.flatMap(category =>
         words(category.split('/').at(-1)))]),
       searchIndex: null,
     };
@@ -119,13 +130,19 @@ async function stateDirectory(project, create) {
 }
 
 function blankState() {
-  return { revision: 0, overrides: {}, agentOverrides: {} };
+  return { revision: 0, overrides: {}, agentOverrides: {}, categoryOverrides: {}, agentCategoryOverrides: {} };
 }
 
-function validOverrides(value) {
+function validOverrides(value, validKey) {
   return value && typeof value === 'object' && !Array.isArray(value) &&
     Object.entries(value).every(([key, status]) =>
-      isSkillPath(key) && (status === 'enabled' || status === 'disabled'));
+      validKey(key) && (status === 'enabled' || status === 'disabled'));
+}
+
+function validAgentOverrides(value, validKey) {
+  return value && typeof value === 'object' && !Array.isArray(value) &&
+    Object.entries(value).every(([agent, overrides]) =>
+      SELECTION_AGENTS.includes(agent) && validOverrides(overrides, validKey));
 }
 
 async function readState(directory) {
@@ -152,14 +169,17 @@ async function readState(directory) {
     }
     if (!contents) throw issue('The latest project skill settings are empty.');
     const state = JSON.parse(contents);
-    if (state?.revision !== latest.revision || !validOverrides(state.overrides) ||
-        !state.agentOverrides || typeof state.agentOverrides !== 'object' ||
-        Array.isArray(state.agentOverrides) ||
-        !Object.entries(state.agentOverrides).every(([agent, scopes]) =>
-          SELECTION_AGENTS.includes(agent) && validOverrides(scopes))) {
+    if (state?.revision !== latest.revision) {
       throw issue('Project skill settings contain an invalid preference revision.');
     }
-    return state;
+    const { categoryOverrides = {}, agentCategoryOverrides = {} } = state;
+    if (!validOverrides(state.overrides, isSkillPath) ||
+        !validAgentOverrides(state.agentOverrides, isSkillPath) ||
+        !validOverrides(categoryOverrides, isCategoryKey) ||
+        !validAgentOverrides(agentCategoryOverrides, isCategoryKey)) {
+      throw issue('Project skill settings contain an invalid preference revision.');
+    }
+    return { ...state, categoryOverrides, agentCategoryOverrides };
   }
 }
 
@@ -167,12 +187,53 @@ export async function loadSkillSelectionState({ project } = {}) {
   return readState(await stateDirectory(await resolveSkillProject(project), false));
 }
 
+const defaultEligibility = Object.freeze({ status: 'default', scope: null, type: null });
+
+function categoryWithStatus(overrides, category, family, status) {
+  if (overrides?.[category] === status) return category;
+  if (family !== category && overrides?.[family] === status) return family;
+  return null;
+}
+
+function describeEligibility(state, category, skillPath, agent) {
+  const family = categoryFamily(category);
+  const agentCategories = agent && state.agentCategoryOverrides?.[agent];
+  const projectCategories = state.categoryOverrides;
+  const agentSkill = skillPath && agent && state.agentOverrides?.[agent]?.[skillPath];
+  const projectSkill = skillPath && state.overrides?.[skillPath];
+
+  const projectBlock = categoryWithStatus(projectCategories, category, family, 'disabled');
+  if (projectBlock) return { status: 'disabled', scope: 'project', type: 'category', category: projectBlock };
+  if (projectSkill === 'disabled') return { status: 'disabled', scope: 'project', type: 'skill' };
+  const agentBlock = categoryWithStatus(agentCategories, category, family, 'disabled');
+  if (agentBlock) return { status: 'disabled', scope: 'agent', type: 'category', category: agentBlock };
+  if (agentSkill === 'disabled') return { status: 'disabled', scope: 'agent', type: 'skill' };
+
+  if (agentSkill === 'enabled') return { status: 'enabled', scope: 'agent', type: 'skill' };
+  if (projectSkill === 'enabled') return { status: 'enabled', scope: 'project', type: 'skill' };
+  const agentAllow = categoryWithStatus(agentCategories, category, family, 'enabled');
+  if (agentAllow) return { status: 'enabled', scope: 'agent', type: 'category', category: agentAllow };
+  const projectAllow = categoryWithStatus(projectCategories, category, family, 'enabled');
+  if (projectAllow) return { status: 'enabled', scope: 'project', type: 'category', category: projectAllow };
+  return defaultEligibility;
+}
+
+export function describeSkillEligibility(state, skillPath, agent) {
+  const slash = skillPath.lastIndexOf('/');
+  const category = slash === -1 ? '' : skillPath.slice(0, slash);
+  return describeEligibility(state, category, skillPath, agent);
+}
+
+export function describeCategoryEligibility(state, category, agent) {
+  return describeEligibility(state, category, undefined, agent);
+}
+
 export function getSkillEligibility(state, skillPath, agent) {
-  const projectStatus = state.overrides[skillPath];
-  const agentStatus = agent && state.agentOverrides[agent]?.[skillPath];
-  if (projectStatus === 'disabled' || agentStatus === 'disabled') return 'disabled';
-  if (projectStatus === 'enabled' || agentStatus === 'enabled') return 'enabled';
-  return 'default';
+  return describeSkillEligibility(state, skillPath, agent).status;
+}
+
+export function getCategoryEligibility(state, category, agent) {
+  return describeCategoryEligibility(state, category, agent).status;
 }
 
 // A complete snapshot is linked into place once. Competing writers can never replace
@@ -200,15 +261,28 @@ async function retireSnapshot(directory, revision) {
   }
 }
 
-export async function setSkillSelectionState({ project, agent, path: skillPath, status, expectedRevision } = {}) {
+export async function setSkillSelectionState({ path: skillPath, ...options } = {}) {
+  return setPreference({ ...options, key: skillPath }, false);
+}
+
+export async function setSkillCategoryState({ category, ...options } = {}) {
+  return setPreference({ ...options, key: category }, true);
+}
+
+async function setPreference({ project, agent, key, status, expectedRevision }, isCategory) {
   validateAgent(agent);
   if (!states.includes(status)) throw issue('Choose enabled, disabled, or default.');
   if (expectedRevision !== undefined && (!Number.isSafeInteger(expectedRevision) || expectedRevision < 0)) {
     throw issue('The expected revision must be a nonnegative integer.');
   }
-  if (!isSkillPath(skillPath) || !(await loadCatalog()).byPath.has(skillPath)) {
+  if (isCategory && (!isCategoryKey(key) || !(await loadCatalog()).categoryKeys.has(key))) {
+    throw issue('Use an exact catalog category path or family.', 'UNKNOWN_CATEGORY', 404);
+  }
+  if (!isCategory && (!isSkillPath(key) || !(await loadCatalog()).byPath.has(key))) {
     throw issue('Use the exact relative path of a catalog skill.', 'UNKNOWN_SKILL', 404);
   }
+  const projectKey = isCategory ? 'categoryOverrides' : 'overrides';
+  const agentKey = isCategory ? 'agentCategoryOverrides' : 'agentOverrides';
   const root = await resolveSkillProject(project);
   let directory = await stateDirectory(root, false);
   while (true) {
@@ -216,14 +290,14 @@ export async function setSkillSelectionState({ project, agent, path: skillPath, 
     if (expectedRevision !== undefined && state.revision !== expectedRevision) {
       throw issue('Project skill settings changed. Reload and try again.', 'STALE_REVISION', 409);
     }
-    const overrides = agent ? (state.agentOverrides[agent] ?? {}) : state.overrides;
-    const previous = overrides[skillPath] ?? 'default';
+    const overrides = agent ? (state[agentKey][agent] ?? {}) : state[projectKey];
+    const previous = overrides[key] ?? 'default';
     if (status === previous) return state;
 
-    if (status === 'default') delete overrides[skillPath];
-    else overrides[skillPath] = status;
-    if (agent && Object.keys(overrides).length) state.agentOverrides[agent] = overrides;
-    else if (agent) delete state.agentOverrides[agent];
+    if (status === 'default') delete overrides[key];
+    else overrides[key] = status;
+    if (agent && Object.keys(overrides).length) state[agentKey][agent] = overrides;
+    else if (agent) delete state[agentKey][agent];
     state.revision += 1;
 
     try {
@@ -266,6 +340,14 @@ function explicitTechnologies(terms, query, known) {
   return terms.filter(term => known.has(term) && !broadTechnologyTerms.has(term) && (term !== 'go' || namesGo));
 }
 
+function taskTerms(value) {
+  return [...new Set(words(value).filter(word => !stopWords.has(word) && !genericTopics.has(word) && word.length > 1))];
+}
+
+function skillFamily(skill) {
+  return `${skill.category}/${skill.name.replace(generatedSuffix, '')}`;
+}
+
 function searchIndex(source) {
   source.searchIndex ??= source.registry.skills.map(skill => {
     const title = words(skill.name);
@@ -288,8 +370,8 @@ function searchIndex(source) {
 }
 
 function scoreSkill(record, terms, technologies, workspaceEvidence, agent, state) {
-  const eligibility = getSkillEligibility(state, record.skill.file, agent);
-  if (eligibility === 'disabled') return null;
+  const eligibility = describeEligibility(state, record.skill.category, record.skill.file, agent);
+  if (eligibility.status === 'disabled') return null;
   if (technologies.some(term => !record.title.has(term) && !record.tagged.has(term) &&
       !record.category.has(term) && !record.description.has(term))) return null;
 
@@ -323,7 +405,7 @@ function scoreSkill(record, terms, technologies, workspaceEvidence, agent, state
   for (let index = 1; index < terms.length; index += 1) {
     if (record.titlePhrase.includes(` ${terms[index - 1]} ${terms[index]} `)) score += 4;
   }
-  if (eligibility === 'enabled') score += 1;
+  if (eligibility.status === 'enabled' && eligibility.type === 'skill') score += 1;
   if (workspaceMatch) score += 2;
   return { ...record, score, matched, specificMatches, workspaceMatch };
 }
@@ -347,9 +429,14 @@ async function readSkill(skillPath) {
     if (resolved !== file || !inside(root, resolved) || !(await lstat(file)).isFile()) return null;
     return (await readFile(file, 'utf8')).replace(/\r\n/g, '\n').trim();
   } catch (error) {
-    if (error.code === 'ENOENT' || error.code === 'ENOTDIR') return null;
+    if (['ENOENT', 'ENOTDIR', 'EACCES', 'EPERM', 'ELOOP'].includes(error.code)) return null;
     throw error;
   }
+}
+
+export async function readCatalogSkill(skillPath) {
+  if (!isSkillPath(skillPath) || !(await loadCatalog()).byPath.has(skillPath)) return null;
+  return readSkill(skillPath);
 }
 
 function estimateTokens(markdown) {
@@ -362,7 +449,7 @@ async function selectionScope(project, directory) {
     readState(await stateDirectory(root, false)),
     detectWorkspaceProfile({ project: root, directory }),
   ]);
-  return { state, workspace };
+  return { projectRoot: root, state, workspace };
 }
 
 function evidenceLabel(evidence) {
@@ -380,6 +467,60 @@ function workspaceCue(record, workspace) {
   });
 }
 
+function matchWorkspaceSkill(recipe, scope, terms, technologies, source) {
+  if (!recipe.enabled || (recipe.agent && recipe.agent !== scope.agent)) return null;
+  const catalogSources = recipe.sourcePaths.map(skillPath => source.byPath.get(skillPath));
+  if (catalogSources.some(skill => !skill ||
+      getSkillEligibility(scope.state, skill.file, scope.agent) === 'disabled')) return null;
+
+  const titleTerms = new Set(taskTerms(recipe.title));
+  const useTerms = new Set(taskTerms(recipe.useWhen));
+  const matched = terms.filter(term => titleTerms.has(term) || useTerms.has(term));
+  const useHits = matched.filter(term => useTerms.has(term));
+  const technologyEvidence = new Set([...titleTerms, ...useTerms, ...catalogSources.flatMap(skill =>
+    words(`${skill.category} ${skill.name} ${skill.tags?.join(' ') ?? ''}`))]);
+  if (matched.length < 2 || !useHits.length ||
+      !matched.some(term => !technologies.includes(term) && !weakWorkspaceTerms.has(term) && !broadFacets.has(term)) ||
+      technologies.some(term => !technologyEvidence.has(term))) {
+    return null;
+  }
+  const score = matched.length * 4 + useHits.length + Number(Boolean(recipe.agent));
+  return { recipe, catalogSources, matched, score };
+}
+
+async function selectWorkspaceSkill(scope, terms, technologies, source, header, tokenBudget) {
+  if (terms.length < 2) return null;
+  const { listWorkspaceSkills, renderWorkspaceSkill } = await import('./workspace-skills.js');
+  const { recipes } = await listWorkspaceSkills({ project: scope.projectRoot });
+  const ranked = recipes
+    .map(recipe => matchWorkspaceSkill(recipe, scope, terms, technologies, source))
+    .filter(Boolean)
+    .sort((first, second) => second.score - first.score ||
+      Number(first.recipe.id > second.recipe.id) - Number(first.recipe.id < second.recipe.id));
+
+  for (const { recipe, catalogSources, matched } of ranked.slice(0, 3)) {
+    const sources = await Promise.all(catalogSources.map(async skill =>
+      ({ path: skill.file, markdown: await readSkill(skill.file) })));
+    if (sources.some(item => !item.markdown)) continue;
+    const rendered = renderWorkspaceSkill({ recipe, sources });
+    if (!rendered) continue;
+    const reason = `Matches the task terms ${matched.join(', ')} in this workspace skill's title or usage notes.`;
+    const markdown = `\n${reason}\n\n${rendered.trim()}\n`;
+    if (estimateTokens(header + markdown) > tokenBudget) continue;
+
+    return {
+      markdown,
+      families: catalogSources.map(skillFamily),
+      match: {
+        kind: 'workspace', recipeId: recipe.id, path: `workspace/${recipe.id}.md`, name: recipe.title,
+        category: 'workspace', difficulty: null, description: recipe.useWhen,
+        sourcePaths: recipe.sourcePaths, reason, estimatedTokens: estimateTokens(markdown),
+      },
+    };
+  }
+  return null;
+}
+
 export async function selectSkills({ project, directory, agent, query, tokenBudget, maxSkills } = {}) {
   validateAgent(agent);
   if (typeof query !== 'string' || query.length > MAX_SELECTION_QUERY_LENGTH) {
@@ -387,27 +528,37 @@ export async function selectSkills({ project, directory, agent, query, tokenBudg
   }
   tokenBudget = parseLimit(tokenBudget, DEFAULT_SELECTION_TOKEN_BUDGET, MAX_SELECTION_TOKEN_BUDGET, 'Token budget');
   maxSkills = parseLimit(maxSkills, DEFAULT_SELECTION_MAX_SKILLS, MAX_SELECTION_SKILLS, 'Maximum skills');
-  const { state, workspace } = await selectionScope(project, directory);
+  const { projectRoot, state, workspace } = await selectionScope(project, directory);
   const result = {
     query, agent: agent ?? null, revision: state.revision, workspace,
     matches: [], estimatedTokens: 0, tokenBudget, maxSkills, markdown: '',
   };
-  const terms = [...new Set(words(query).filter(word => !stopWords.has(word) && !genericTopics.has(word) && word.length > 1))];
+  const terms = taskTerms(query);
   if (!terms.length) return result;
   let markdown = '# Omni Skills Forge task context\n\nSelected catalog skills. Token counts are estimates.\n';
   if (estimateTokens(markdown) >= tokenBudget) return result;
 
   const source = await loadCatalog();
   const technologies = explicitTechnologies(terms, query, source.technologies);
-  const ranked = searchIndex(source)
-    .map(record => scoreSkill(record, terms, technologies,
-      technologies.length ? null : workspaceCue(record, workspace), agent, state))
-    .filter(Boolean)
-    .sort(scoreOrder);
-  const hasSpecific = ranked.some(record => record.specificMatches);
   const families = new Set();
+  const selectedWorkspaceSkill = await selectWorkspaceSkill({ projectRoot, state, agent },
+    terms, technologies, source, markdown, tokenBudget);
+  if (selectedWorkspaceSkill) {
+    result.matches.push(selectedWorkspaceSkill.match);
+    markdown += selectedWorkspaceSkill.markdown;
+    for (const family of selectedWorkspaceSkill.families) families.add(family);
+  }
+  const ranked = result.matches.length < maxSkills
+    ? searchIndex(source)
+      .map(record => scoreSkill(record, terms, technologies,
+        technologies.length ? null : workspaceCue(record, workspace), agent, state))
+      .filter(Boolean)
+      .sort(scoreOrder)
+    : [];
+  const hasSpecific = ranked.some(record => record.specificMatches);
   let inspected = 0;
   for (const { family, matched, skill, specificMatches, workspaceMatch } of ranked) {
+    if (result.matches.length === maxSkills) break;
     if (families.has(family) || (hasSpecific && !specificMatches)) continue;
     if (++inspected > 8 * maxSkills) break;
     const content = await readSkill(skill.file);
@@ -424,7 +575,6 @@ export async function selectSkills({ project, directory, agent, query, tokenBudg
       path: skill.file, name: skill.name, category: skill.category, difficulty: skill.difficulty,
       description: skill.description, reason, estimatedTokens: estimateTokens(chunk),
     });
-    if (result.matches.length === maxSkills) break;
   }
   if (result.matches.length) {
     result.markdown = markdown;
@@ -452,9 +602,9 @@ export async function recommendWorkspaceSkills({ project, directory, agent, maxS
   for (const record of searchIndex(await loadCatalog())) {
     if (!families.has(record.family)) continue;
     const { skill } = record;
-    const status = getSkillEligibility(state, skill.file, agent);
-    if (status === 'disabled') continue;
-    const score = status === 'enabled' ? 1 : 0;
+    const eligibility = describeEligibility(state, skill.category, skill.file, agent);
+    if (eligibility.status === 'disabled') continue;
+    const score = eligibility.status === 'enabled' && eligibility.type === 'skill' ? 1 : 0;
     const candidate = { skill, score };
     const previous = available.get(record.family);
     if (!previous || scoreOrder(candidate, previous) < 0) available.set(record.family, candidate);

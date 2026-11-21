@@ -168,3 +168,103 @@ test('dashboard distinguishes folder suggestions and task previews from deliveri
   const overview = await (await fetch(url + '/api/deliveries')).json();
   assert.deepEqual(overview.latestByAgent, [delivery]);
 });
+
+test('dashboard filters catalog pages and exposes inherited category exclusions for the chosen agent', async t => {
+  const { url, projectRoot } = await dashboardFixture(t);
+  await writeFile(path.join(projectRoot, 'package.json'), '{"dependencies":{"react":"^19.0.0"}}');
+  const project = await (await fetch(url + '/api/project')).json();
+  assert.equal(project.categoryGroups.length, 6);
+  assert.equal(project.categoryGroups.flatMap(group => group.categories).length, 28);
+  assert.ok(project.categoryGroups.find(group => group.family === 'web-dev').categories.includes('web-dev/react'));
+
+  const getCatalog = async (args = {}) => {
+    const response = await fetch(url + '/api/catalog?' + new URLSearchParams({ agent: 'codex', category: 'web-dev/react', ...args }));
+    assert.equal(response.status, 200);
+    return response.json();
+  };
+  assert.equal((await fetch(url + '/api/catalog?category=unknown')).status, 404);
+  const first = await getCatalog({ query: 'accessibility' });
+  const second = await getCatalog({ query: 'accessibility', page: 2 });
+  assert.ok(first.total > first.pageSize);
+  assert.equal(first.total, second.total);
+  assert.notEqual(first.items[0].path, second.items[0].path);
+  assert.ok([...first.items, ...second.items].every(skill => skill.category === 'web-dev/react' && /accessibility/u.test(skill.name)));
+  assert.ok(first.counts.category > first.total && first.counts.category < first.counts.catalog);
+
+  const mutate = (category, status, expectedRevision, agent) =>
+    post(url, '/api/category-preferences', { category, status, expectedRevision, agent });
+  assert.equal((await mutate('unknown', 'disabled', 0, 'codex')).status, 404);
+  assert.equal((await mutate('web-dev/react', 'enabled', 0, 'codex')).status, 200);
+  assert.equal((await mutate('web-dev', 'disabled', 1, 'codex')).status, 200);
+  assert.equal((await mutate('web-dev', 'enabled', 1, 'codex')).status, 409);
+  const disabled = await getCatalog({ filter: 'disabled' });
+  assert.equal(disabled.total, disabled.counts.category);
+  assert.equal(disabled.counts.categoryDisabled, disabled.counts.category);
+  assert.ok(disabled.counts.disabled > disabled.counts.categoryDisabled);
+  assert.equal(disabled.categoryPreference.agentStatus, 'enabled');
+  assert.equal(disabled.categoryPreference.projectBlock, null);
+  assert.equal(disabled.categoryPreference.agentBlock.category, 'web-dev');
+  assert.equal(disabled.categoryPreference.agentBlock.scope, 'agent');
+  assert.ok(disabled.items.every(skill => skill.eligibility === 'disabled' && skill.agentBlock.category === 'web-dev'));
+
+  const other = await getCatalog({ agent: 'cursor', filter: 'disabled' });
+  assert.equal(other.total, 0);
+  assert.equal(other.categoryPreference.agentBlock, null);
+  const recommendations = await (await post(url, '/api/workspace', { directory: '.', agent: 'codex' })).json();
+  assert.ok(recommendations.suggestions.every(skill => !skill.category.startsWith('web-dev/')));
+
+  assert.equal((await mutate('web-dev', 'disabled', 2)).status, 200);
+  const inherited = await getCatalog({ agent: 'cursor', filter: 'disabled' });
+  assert.equal(inherited.categoryPreference.projectBlock.category, 'web-dev');
+  assert.equal(inherited.categoryPreference.agentBlock.scope, 'project');
+  assert.equal(inherited.counts.categoryDisabled, inherited.counts.category);
+  assert.equal((await mutate('web-dev', 'default', 3)).status, 200);
+  assert.equal((await mutate('web-dev', 'default', 4, 'codex')).status, 200);
+  const reset = await getCatalog({ filter: 'eligible' });
+  assert.equal(reset.total, reset.counts.category);
+  assert.equal(reset.counts.categoryDisabled, 0);
+  assert.equal(reset.categoryPreference.eligibility, 'enabled');
+});
+
+test('dashboard previews and downloads a composed skill, then saves and changes its status explicitly', async t => {
+  const { url } = await dashboardFixture(t);
+  const base = '/api/workspace-skills';
+  const draft = {
+    title: 'Review React forms',
+    useWhen: 'Improve React accessibility and form validation.',
+    instructions: 'Verify keyboard focus after validation.',
+    agent: 'codex',
+    sourcePaths: [
+      'web-dev/react/react-accessibility-a11y-advanced-intermediate.md',
+      'web-dev/react/react-form-handling-advanced-intermediate.md',
+    ],
+  };
+  const preview = await post(url, base + '/compose', draft);
+  assert.equal(preview.status, 200);
+  const composed = await preview.json();
+  assert.equal(composed.fitsBudget, true);
+  assert.match(composed.portableMarkdown, /^---\nname: "review-react-forms"\n/u);
+  assert.match(composed.portableMarkdown, /Verify keyboard focus after validation/u);
+  assert.deepEqual(composed.sourcePaths, draft.sourcePaths);
+  assert.deepEqual(await (await fetch(url + base)).json(), { revision: 0, recipes: [] });
+  const overBudget = await (await post(url, base + '/compose', { ...draft, tokenBudget: 1 })).json();
+  assert.equal(overBudget.fitsBudget, false);
+  assert.equal(overBudget.portableMarkdown, composed.portableMarkdown);
+  const saved = await post(url, base + '/create', draft);
+  assert.equal(saved.status, 201);
+  const { revision, recipe } = await saved.json();
+  assert.equal(recipe.agent, 'codex');
+  assert.equal(recipe.enabled, true);
+  assert.equal((await post(url, base + '/compose', { id: recipe.id, agent: 'cursor' })).status, 409);
+  assert.equal((await post(url, base + '/status', { id: recipe.id, enabled: false, expectedRevision: revision })).status, 200);
+  assert.equal((await post(url, base + '/compose', { id: recipe.id, agent: 'codex' })).status, 409);
+  assert.equal((await post(url, base + '/status', { id: recipe.id, enabled: true, expectedRevision: revision })).status, 409);
+  assert.equal((await post(url, '/api/category-preferences', { category: 'web-dev', status: 'disabled', expectedRevision: 0 })).status, 200);
+  const blocked = await post(url, base + '/compose', draft);
+  assert.equal(blocked.status, 409);
+  assert.match((await blocked.json()).error, /disabled for this project or agent/u);
+  assert.equal((await post(url, base + '/remove', { id: recipe.id, expectedRevision: revision })).status, 409);
+  const removed = await post(url, base + '/remove', { id: recipe.id, expectedRevision: revision + 1 });
+  assert.equal(removed.status, 200);
+  assert.deepEqual((await removed.json()).recipes, []);
+});

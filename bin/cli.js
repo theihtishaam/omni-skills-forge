@@ -4,7 +4,8 @@ import chalk from 'chalk';
 import boxen from 'boxen';
 import gradient from 'gradient-string';
 import {
-  SELECTION_AGENTS, exportSkillContext, resolveSkillProject, selectSkills, setSkillSelectionState,
+  SELECTION_AGENTS, exportSkillContext, resolveSkillProject, selectSkills,
+  setSkillCategoryState, setSkillSelectionState,
 } from '../src/skill-selection.js';
 
 const VERSION = '2.3.0';
@@ -158,7 +159,8 @@ program
       if (!summary.matches.length) console.log('No catalog skills matched within the requested limits.');
       else {
         for (const match of summary.matches) {
-          console.log(`${match.path} (~${match.estimatedTokens} tokens)\n  ${match.reason}`);
+          const label = match.kind === 'workspace' ? `${match.name} (${match.path})` : match.path;
+          console.log(`${label} (~${match.estimatedTokens} tokens)\n  ${match.reason}`);
         }
         console.log(`This pack uses an estimated ${summary.estimatedTokens} of ${summary.tokenBudget} input tokens.`);
       }
@@ -167,18 +169,23 @@ program
   });
 
 for (const [command, status, description] of [
-  ['enable', 'enabled', 'Prefer a catalog skill when it matches a task'],
-  ['disable', 'disabled', 'Exclude a catalog skill from task selection'],
-  ['reset-skill', 'default', 'Restore default eligibility for a catalog skill'],
+  ['enable', 'enabled', 'Allow a matching catalog skill or category'],
+  ['disable', 'disabled', 'Exclude a catalog skill or category from task selection'],
+  ['reset-skill', 'default', 'Restore default eligibility for a catalog skill or category'],
 ]) {
   program.command(command)
     .description(description)
-    .argument('<skill-path>', 'Exact relative path shown in the catalog')
+    .argument('[skill-path]', 'Exact relative path shown in the catalog')
+    .option('--category <category>', 'Exact catalog category path or family')
     .option('--project <dir>', 'Project directory')
     .option('--agent <id>', 'Limit this preference to one agent', agentOption)
-    .action(async (skillPath, { project, agent }) => {
-      const { revision } = await setSkillSelectionState({ project, agent, path: skillPath, status });
-      console.log(`${skillPath}: ${status} (${agent || 'all agents'}, revision ${revision})`);
+    .action(async (skillPath, { category, project, agent }) => {
+      if (Boolean(skillPath) === Boolean(category)) throw new Error('Choose one skill path or use --category.');
+      const options = { project, agent, status };
+      const { revision } = category
+        ? await setSkillCategoryState({ ...options, category })
+        : await setSkillSelectionState({ ...options, path: skillPath });
+      console.log(`${category || skillPath} is ${status} for ${agent || 'all agents'} at revision ${revision}.`);
     });
 }
 

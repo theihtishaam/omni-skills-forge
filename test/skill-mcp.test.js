@@ -146,7 +146,7 @@ test('Omni MCP negotiates stdio, pins project and agent, and returns only select
     assert.equal(structuredContent, undefined);
     assert.equal(content[0].type, 'text');
     assert.match(content[0].text, /Token counts are estimates/);
-    const skillText = (await readFile(new URL(`../skills/${skill}`, import.meta.url), 'utf8')).trim();
+    const skillText = (await readFile(new URL(`../skills/${skill}`, import.meta.url), 'utf8')).replace(/\r\n/g, '\n').trim();
     assert.equal(content[0].text.split(skillText).length, 2);
     assert.ok(content[0].text.includes(skill));
     assert.ok(Math.ceil(Buffer.byteLength(content[0].text) / 4) <= tool.inputSchema.properties.tokenBudget.default);

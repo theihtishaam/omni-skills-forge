@@ -1,7 +1,7 @@
 {
   "name": "omni-skills-forge",
   "version": "2.3.0",
-  "description": "Pick coding skills for the task and project folder. Manage per-agent preferences and see which skills were delivered through local prompt hooks or MCP.",
+  "description": "Match coding skills to your workspace, control categories per agent, and combine selected guidance into reusable skills for prompt hooks or MCP.",
   "main": "src/index.js",
   "bin": {
     "omni-skills-forge": "bin/cli.js",

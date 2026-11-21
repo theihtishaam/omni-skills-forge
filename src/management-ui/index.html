@@ -42,6 +42,7 @@
         <a href="#task">Task context</a>
         <a href="#delivery">Delivered context</a>
         <a href="#catalog">Skill catalog</a>
+        <a href="#studio">Build a skill</a>
         <a href="#catalog" id="disabled-link">Disabled skills <span id="disabled-count" class="nav-count">0</span></a>
       </nav>
       <div class="rail-foot">
@@ -151,6 +152,19 @@
         <div class="section-title">
           <div><h2 id="catalog-heading">Skill catalog</h2><p id="catalog-scope">Browse the catalog and manage eligibility.</p></div>
         </div>
+        <div class="category-bar">
+          <div class="category-choice">
+            <label for="catalog-category">Catalog category</label>
+            <select id="catalog-category" disabled><option value="">All categories</option></select>
+            <p id="category-counts" class="field-note"></p>
+          </div>
+          <div class="category-policy">
+            <h3 id="category-policy-heading">Category preference</h3>
+            <div id="category-preference" role="group" aria-labelledby="category-policy-heading">
+              <p class="field-note">Choose a family or category to edit its preference.</p>
+            </div>
+          </div>
+        </div>
         <form id="catalog-form" class="catalog-form" role="search" aria-label="Skill catalog search">
           <label for="catalog-query" class="visually-hidden">Filter skills by name, category, or tag</label>
           <input type="search" id="catalog-query" maxlength="160" placeholder="Filter by skill, category, or tag">
@@ -169,6 +183,56 @@
         <div class="pagination">
           <span id="page-summary" class="muted small" aria-live="polite"></span>
           <div><button id="previous" class="secondary" type="button" disabled>Previous</button><button id="next" class="secondary" type="button" disabled>Next</button></div>
+        </div>
+      </section>
+
+      <section id="studio" class="studio" aria-labelledby="studio-heading">
+        <div class="section-title">
+          <div><h2 id="studio-heading">Build a workspace skill</h2><p>Combine up to five eligible catalog skills into one reusable skill.</p></div>
+          <button id="use-matches" class="secondary" type="button" disabled>Use task matches</button>
+        </div>
+        <div class="studio-grid">
+          <form id="studio-form" class="studio-form">
+            <div class="studio-sources">
+              <div class="studio-source-heading"><h3>Source skills</h3><span id="source-count" class="muted small" aria-live="polite">0 / 5</span></div>
+              <div id="source-list"><p class="field-note">Add a source from the skill catalog or task preview.</p></div>
+            </div>
+            <label for="recipe-title">Title
+              <input id="recipe-title" maxlength="120" required placeholder="React accessible form review">
+            </label>
+            <label for="recipe-when">When to use
+              <textarea id="recipe-when" rows="2" maxlength="600" required placeholder="When reviewing keyboard access and validation in React forms"></textarea>
+            </label>
+            <label for="recipe-instructions">Your instructions <span class="muted">(optional)</span>
+              <textarea id="recipe-instructions" rows="2" maxlength="1800" placeholder="Add steps or conventions specific to this workspace"></textarea>
+            </label>
+            <details id="recipe-budget-options" class="advanced">
+              <summary>Preview token budget</summary>
+              <label for="recipe-budget">Estimated token limit
+                <input id="recipe-budget" type="number" min="1" max="16000" value="2400" required>
+              </label>
+            </details>
+            <label for="recipe-scope">Availability
+              <select id="recipe-scope"><option value="agent">This agent</option><option value="project">All agents</option></select>
+            </label>
+            <div class="studio-actions">
+              <button id="preview-recipe" class="primary" type="submit" disabled>Preview composition</button>
+              <button id="save-recipe" class="secondary" type="button" disabled>Save workspace skill</button>
+            </div>
+            <p id="studio-error" class="studio-error" role="alert" hidden></p>
+            <p id="studio-status" class="field-note" role="status"></p>
+          </form>
+          <div class="studio-results">
+            <div class="studio-preview">
+              <div class="studio-source-heading"><h3>Composed Markdown</h3><button id="download-recipe" class="secondary compact" type="button" disabled>Download SKILL.md</button></div>
+              <p id="recipe-preview-note" class="field-note">Preview the composition to see the Markdown and estimated context size.</p>
+              <pre id="recipe-markdown" tabindex="0" aria-label="Composed Markdown" hidden></pre>
+            </div>
+            <div class="studio-library">
+              <h3>Saved workspace skills</h3>
+              <div id="recipe-list"><p class="field-note">Checking this workspace…</p></div>
+            </div>
+          </div>
         </div>
       </section>
 

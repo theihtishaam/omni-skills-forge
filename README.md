@@ -46,7 +46,11 @@ Reproduce the comparison from the repository with `node scripts/measure-workspac
 
 ### 3. Set the rules for each agent
 
-Under **Skill catalog**, choose **This agent** or **All agents** before changing a switch. For example, disable a form-handling skill for Claude Code and leave it available to Codex. A project-wide exclusion applies to everyone in that project. Other workspaces keep their own preferences.
+Under **Skill catalog**, choose **This agent** or **All agents** before changing a switch. Use the category dropdown to browse a family or a single topic. For example, pick **Docker** and turn it off for Codex to skip Docker guidance in this project. The other DevOps categories and Claude Code keep their own settings. Selecting a category in the dropdown only filters the list. Its switch changes what agents can receive.
+
+For a smaller change, leave the category eligible and turn off just one skill. A project-wide exclusion applies to every agent. If a whole family is disabled, turn that family back on before enabling one of its categories.
+
+![Skill catalog filtered by category with separate category and individual skill controls](https://raw.githubusercontent.com/theihtishaam/omni-skills-forge/v2.3.0/assets/dashboard-categories.png)
 
 | What the dashboard shows | What happens on the next request |
 | --- | --- |
@@ -56,6 +60,18 @@ Under **Skill catalog**, choose **This agent** or **All agents** before changing
 | Delivered context | Omni returned the listed files to an agent through its hook or MCP connection. |
 
 ![Catalog switches showing how to change a skill preference for a single agent in a project](https://raw.githubusercontent.com/theihtishaam/omni-skills-forge/v2.3.0/assets/dashboard-agent-preferences.png)
+
+### 4. Make a reusable skill from your selection
+
+Suppose your team reviews checkout forms every week. Pick the accessibility and form-handling skills from the catalog, or start with the matches from a task preview. In the skill builder, name the combination **Checkout form review**, describe when to use it, and add a project rule such as “Check that a failed submission keeps the customer’s input.”
+
+Preview the merged Markdown before saving. You can combine one to five catalog files, see their source paths, and save the result for this project or one agent. Future matching tasks can receive it as a single skill. If you turn off a source file or its category, Omni skips the saved combination. Under **Saved workspace skills**, you can disable it for later or remove your copy.
+
+![Creating a named workspace skill from selected catalog sources and previewing the combined instructions](https://raw.githubusercontent.com/theihtishaam/omni-skills-forge/v2.3.0/assets/dashboard-skill-builder.png)
+
+In the [recorded checkout example](https://github.com/theihtishaam/omni-skills-forge/blob/v2.3.0/docs/workspace-comparison.json), the Codex hook returned two source files as one workspace skill. Claude Code received none of the custom checkout instructions. Disabling the React category for Codex also stopped those instructions on its next request.
+
+To reuse the instructions outside Omni, use **Download SKILL.md** on the preview. The download is a snapshot. Changes to this workspace’s rules apply to future Omni deliveries.
 
 ### Automatic selection
 
@@ -129,6 +145,7 @@ Use an explicit `--tool` and `--dir` to control where files go. `--all` selects 
 | `osf select "task" --agent codex --project .` | Preview the selected context. Add `--output ./task-skills.md` to save a new Markdown file. |
 | `osf disable <catalog-path> --agent claude-code --project .` | Exclude this file from Claude Code's selections in this project. Omit `--agent` to exclude it across agents. |
 | `osf enable <catalog-path> --agent claude-code --project .` | Allow this file to compete when it matches, subject to the project's policy. |
+| `osf disable --category devops/docker --agent codex --project .` | Skip Docker skills for Codex in this project. Use `--category devops` for the whole family. |
 | `osf mcp --project . --agent codex` | Serve the task selection tool over standard input/output and keep a local receipt for delivered skills. |
 | `osf` | Opens the interactive menu. |
 | `osf search <query> --limit 25` | Matches names, descriptions, or tags across the full registry. |

@@ -5,6 +5,8 @@ import { exactworkRecommendation } from './exactwork-recommendation.js';
 import {
   DEFAULT_SELECTION_MAX_SKILLS,
   DEFAULT_SELECTION_TOKEN_BUDGET,
+  describeCategoryEligibility,
+  describeSkillEligibility,
   getSkillEligibility,
   loadSkillSelectionCatalog,
   loadSkillSelectionState,
@@ -15,20 +17,27 @@ import {
   resolveSkillProject,
   SELECTION_AGENTS,
   selectSkills,
+  setSkillCategoryState,
   setSkillSelectionState,
 } from './skill-selection.js';
 import { listSkillDeliveries } from './skill-delivery.js';
+import { exportWorkspaceSkillMarkdown } from './workspace-skill-export.js';
+import {
+  composeWorkspaceSkill, createWorkspaceSkill, listWorkspaceSkills, previewWorkspaceSkill, setWorkspaceSkillEnabled,
+} from './workspace-skills.js';
 
 const HOST = '127.0.0.1';
 const MAX_BODY_BYTES = 32 * 1024;
 const CATALOG_PAGE_SIZE = 8;
 const WORKSPACE_SUGGESTIONS = 3;
 const RECENT_DELIVERIES = 5;
+const WORKSPACE_SKILL_FILE = /^workspace\/(.+)\.md$/u;
 const BROWSE_FILTERS = new Set(['all', 'eligible', 'disabled']);
 const UI_ASSETS = [
   ['/', 'index.html', 'text/html; charset=utf-8'],
   ['/dashboard.css', 'dashboard.css', 'text/css; charset=utf-8'],
   ['/dashboard.js', 'dashboard.js', 'text/javascript; charset=utf-8'],
+  ['/skill-builder.js', 'skill-builder.js', 'text/javascript; charset=utf-8'],
 ];
 const SECURITY_HEADERS = {
   'Cache-Control': 'no-store',
@@ -87,18 +96,40 @@ function parseAgent(agent) {
   return agent;
 }
 
-function mapStatus(state, skillPath, agent) {
+function disabledRule(rule) {
+  return rule?.status === 'disabled' ? rule : null;
+}
+
+function mapPreferences(state, key, agent, kind) {
+  const isCategory = kind === 'category';
+  const projectStatus = (isCategory ? state.categoryOverrides : state.overrides)[key] ?? 'default';
+  const agentStatus = (isCategory ? state.agentCategoryOverrides : state.agentOverrides)[agent]?.[key] ?? 'default';
+  const describe = isCategory ? describeCategoryEligibility : describeSkillEligibility;
+  const effective = describe(state, key, agent);
+  const parent = key.includes('/') ? key.slice(0, key.lastIndexOf('/')) : null;
+  const projectBlock = parent ? disabledRule(describeCategoryEligibility(state, parent)) : null;
+  const agentBlock = projectBlock ?? disabledRule(describe(state, key)) ??
+    (parent ? disabledRule(describeCategoryEligibility(state, parent, agent)) : null);
   return {
-    projectStatus: state.overrides[skillPath] ?? 'default',
-    agentStatus: state.agentOverrides[agent]?.[skillPath] ?? 'default',
-    eligibility: getSkillEligibility(state, skillPath, agent),
+    projectStatus,
+    agentStatus,
+    eligibility: effective.status,
+    effective,
+    projectBlock,
+    agentBlock,
   };
 }
 
-function catalogPage(catalog, state, parameters) {
+function mapStatus(state, skillPath, agent) {
+  return mapPreferences(state, skillPath, agent, 'skill');
+}
+
+function catalogPage(catalog, categoryKeys, state, parameters) {
   const agent = parseAgent(parameters.get('agent'));
   const filter = parameters.get('filter') ?? 'all';
   if (!BROWSE_FILTERS.has(filter)) throw badRequest('Choose a supported catalog filter.');
+  const category = parameters.get('category') ?? '';
+  if (category && !categoryKeys.has(category)) throw badRequest('Choose a recognized catalog category.', 404);
   const rawQuery = parameters.get('query') ?? '';
   if (rawQuery.length > 160) throw badRequest('Keep catalog search under 160 characters.');
   const terms = rawQuery.toLowerCase().split(/[\s\-_/]+/u).filter(Boolean);
@@ -108,12 +139,17 @@ function catalogPage(catalog, state, parameters) {
   }
 
   let disabled = 0;
+  let categoryTotal = 0;
+  let categoryDisabled = 0;
   let total = 0;
   const items = [];
   const offset = (page - 1) * CATALOG_PAGE_SIZE;
   for (const { skill, searchable } of catalog) {
     const isDisabled = getSkillEligibility(state, skill.file, agent) === 'disabled';
     if (isDisabled) disabled++;
+    if (category && skill.category !== category && !skill.category.startsWith(category + '/')) continue;
+    categoryTotal++;
+    if (isDisabled) categoryDisabled++;
     if (filter === 'eligible' && isDisabled) continue;
     if (filter === 'disabled' && !isDisabled) continue;
     if (!terms.every(term => searchable.includes(term))) continue;
@@ -134,12 +170,13 @@ function catalogPage(catalog, state, parameters) {
     pageSize: CATALOG_PAGE_SIZE,
     total,
     items,
+    categoryPreference: category ? { category, ...mapPreferences(state, category, agent, 'category') } : null,
     revision: state.revision,
     counts: {
       catalog: catalog.length,
       disabled,
-      projectOverrides: Object.keys(state.overrides).length,
-      agentOverrides: Object.keys(state.agentOverrides[agent] ?? {}).length,
+      category: categoryTotal,
+      categoryDisabled,
     },
   };
 }
@@ -149,7 +186,7 @@ export async function startManagementDashboard({ projectRoot = process.cwd(), po
     throw new Error('Dashboard port must be an integer from 0 to 65535.');
   }
   const project = await resolveSkillProject(projectRoot);
-  const [{ skills, categories }, ...files] = await Promise.all([
+  const [{ skills, categories, families }, ...files] = await Promise.all([
     loadSkillSelectionCatalog(),
     ...UI_ASSETS.map(([, filename]) => readFile(new URL('./management-ui/' + filename, import.meta.url))),
   ]);
@@ -165,6 +202,11 @@ export async function startManagementDashboard({ projectRoot = process.cwd(), po
       .join(' ').toLowerCase().replace(/[-_/]+/gu, ' '),
   }));
   const skillsByPath = new Map(skills.map(skill => [skill.file, skill]));
+  const categoryKeys = new Set([...families, ...categories]);
+  const categoryGroups = families.map(family => ({
+    family,
+    categories: categories.filter(category => category.startsWith(family + '/')),
+  }));
 
   let authority;
   let url;
@@ -195,6 +237,7 @@ export async function startManagementDashboard({ projectRoot = process.cwd(), po
             name: path.basename(project) || project,
             agents: SELECTION_AGENTS,
             categories: categories.length,
+            categoryGroups,
             limits: {
               maxQueryLength: MAX_SELECTION_QUERY_LENGTH,
               defaultMaxSkills: DEFAULT_SELECTION_MAX_SKILLS,
@@ -207,15 +250,23 @@ export async function startManagementDashboard({ projectRoot = process.cwd(), po
         }
         if (route === '/api/catalog') {
           const state = await loadSkillSelectionState({ project });
-          json(response, 200, catalogPage(catalog, state, target.searchParams));
+          json(response, 200, catalogPage(catalog, categoryKeys, state, target.searchParams));
           return;
         }
         if (route === '/api/deliveries') {
           const agent = parseAgent(target.searchParams.get('agent'));
           const records = await listSkillDeliveries({ project, agent });
+          const recipeNames = new Map();
+          if (records.some(record => record.paths.some(skillPath => WORKSPACE_SKILL_FILE.test(skillPath)))) {
+            const { recipes } = await listWorkspaceSkills({ project }).catch(() => ({ recipes: [] }));
+            for (const recipe of recipes) recipeNames.set(recipe.id, recipe.title);
+          }
           const summarize = ({ agent, method, directory, at, paths }) => ({
             agent, method, directory, at,
-            skills: paths.map(skillPath => ({ path: skillPath, name: skillsByPath.get(skillPath)?.name ?? skillPath })),
+            skills: paths.map(skillPath => ({
+              path: skillPath,
+              name: skillsByPath.get(skillPath)?.name ?? recipeNames.get(WORKSPACE_SKILL_FILE.exec(skillPath)?.[1]) ?? skillPath,
+            })),
           });
           const payload = { records: records.slice(0, RECENT_DELIVERIES).map(summarize) };
           if (!agent) {
@@ -228,6 +279,39 @@ export async function startManagementDashboard({ projectRoot = process.cwd(), po
           json(response, 200, payload);
           return;
         }
+        if (route === '/api/workspace-skills') {
+          json(response, 200, await listWorkspaceSkills({ project }));
+          return;
+        }
+      }
+      if (request.method === 'POST' && ['/api/workspace-skills/compose', '/api/workspace-skills/create', '/api/workspace-skills/status', '/api/workspace-skills/remove'].includes(route)) {
+        const body = await readJson(request);
+        const agent = parseAgent(body.agent);
+        const { id, title, useWhen, instructions, sourcePaths, tokenBudget, enabled, expectedRevision } = body;
+        if (route === '/api/workspace-skills/compose') {
+          const result = id !== undefined
+            ? await composeWorkspaceSkill({ project, agent, id, tokenBudget })
+            : await previewWorkspaceSkill({ project, agent, title, useWhen, instructions, sourcePaths, tokenBudget });
+          const portableMarkdown = exportWorkspaceSkillMarkdown({
+            title: result.recipe.title, useWhen: result.recipe.useWhen, markdown: result.markdown,
+          });
+          json(response, 200, { ...result, portableMarkdown });
+          return;
+        }
+        if (route === '/api/workspace-skills/create') {
+          json(response, 201, await createWorkspaceSkill({ project, agent, title, useWhen, instructions, sourcePaths }));
+          return;
+        }
+        if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 0) {
+          throw badRequest('A current workspace skill revision is required.');
+        }
+        if (route === '/api/workspace-skills/remove') {
+          const { removeWorkspaceSkill } = await import('./workspace-skills.js');
+          json(response, 200, await removeWorkspaceSkill({ project, id, expectedRevision }));
+        } else {
+          json(response, 200, await setWorkspaceSkillEnabled({ project, id, enabled, expectedRevision }));
+        }
+        return;
       }
       if (request.method === 'POST' && route === '/api/workspace') {
         const { directory, agent: rawAgent } = await readJson(request);
@@ -263,18 +347,23 @@ export async function startManagementDashboard({ projectRoot = process.cwd(), po
         }
         json(response, 200, {
           ...selection,
-          matches: selection.matches.map(match => ({ ...match, ...mapStatus(state, match.path, agent) })),
+          matches: selection.matches.map(match => WORKSPACE_SKILL_FILE.test(match.path)
+            ? match
+            : { ...match, ...mapStatus(state, match.path, agent) }),
         });
         return;
       }
-      if (request.method === 'POST' && route === '/api/preferences') {
-        const { path: skillPath, status, agent: rawAgent, expectedRevision } = await readJson(request);
+      if (request.method === 'POST' && (route === '/api/preferences' || route === '/api/category-preferences')) {
+        const { path: skillPath, category, status, agent: rawAgent, expectedRevision } = await readJson(request);
         const agent = parseAgent(rawAgent);
         if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 0) {
           throw badRequest('A current policy revision is required.');
         }
-        const state = await setSkillSelectionState({ project, agent, path: skillPath, status, expectedRevision });
-        json(response, 200, { revision: state.revision, ...mapStatus(state, skillPath, agent) });
+        const options = { project, agent, status, expectedRevision };
+        const state = route === '/api/category-preferences'
+          ? await setSkillCategoryState({ ...options, category })
+          : await setSkillSelectionState({ ...options, path: skillPath });
+        json(response, 200, { revision: state.revision });
         return;
       }
       throw badRequest('Dashboard route not found.', 404);

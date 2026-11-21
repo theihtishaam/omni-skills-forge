@@ -6,6 +6,15 @@ Workspace detection checks known project files in the chosen directory and walks
 
 ## Choose who can use a skill
 
+The **Skill catalog** category dropdown groups 28 topics into six families. Pick a family such as DevOps, or a topic such as Docker. You can search and page through its skills before changing any preferences. The category switch applies to the scope selected on the left. A switch beside an individual row applies to that file.
+
+For example, turn off `devops/docker` for Codex to skip Docker guidance while keeping Kubernetes available. Turn off `devops` for all agents to exclude the whole family in this project. A narrower switch cannot reopen a category or family blocked by a wider rule. Re-enable the blocking category at the displayed scope to make its skills eligible again. A task still has to match before the agent receives guidance.
+
+```sh
+osf disable --category devops/docker --agent codex --project .
+osf enable --category devops/docker --agent codex --project .
+```
+
 In **Skill catalog**, use **This agent** to change one agent's preference, or **All agents** for a project-wide choice. Disabling a skill for the project excludes it across agents. Enabling it makes it eligible when its topic matches. Changing a preference affects the next selection. A host can retain context it already received.
 
 The CLI takes the exact catalog path shown on a skill. For example:
@@ -16,6 +25,14 @@ osf select "Review keyboard accessibility in this form" --project . --directory 
 ```
 
 The default pack limit is three skills and 2,400 estimated tokens. The estimate uses the complete rendered Markdown, including paths, headings and match reasons. The same request with the same preferences and installed catalog produces the same selection. The picker can return fewer skills or none. An empty result contributes zero skill text.
+
+## Build a skill for recurring work
+
+To give recurring work its own skill, pick up to five source files in the dashboard. Give the skill a name and a specific **When to use** sentence. “Review keyboard access and failed submission on a checkout form” is more informative than “Help with this project.” Add any project-specific instructions, preview the combined Markdown and choose its scope before saving.
+
+Omni builds the guidance locally from your selected sources. Its automatic picker checks the task, the saved skill’s scope and the current rules for every source. A disabled source makes the entire combination ineligible. A combination that does not fit the available context is skipped. Successful delivery counts as one skill and keeps the source paths in the Markdown.
+
+**Download SKILL.md** exports the preview with a name and description. For a host supporting the Agent Skills format, put that file in a folder matching the exported `name`. Your saved workspace skill continues to follow Omni’s current preferences. The exported copy is managed by its destination. [Agent Skills format](https://agentskills.io/specification)
 
 ## Run automatically on a submitted prompt
 

@@ -34,5 +34,16 @@
       ],
       "deliveredBytes": 0
     }
-  ]
+  ],
+  "workspaceSkill": {
+    "title": "Checkout form review",
+    "sourcePaths": [
+      "web-dev/react/react-accessibility-a11y-advanced-intermediate.md",
+      "web-dev/react/react-form-handling-advanced-intermediate.md"
+    ],
+    "deliveredAs": 1,
+    "guidanceReachedCodex": true,
+    "guidanceReachedClaude": false,
+    "guidanceReachedCodexAfterCategoryDisabled": false
+  }
 }

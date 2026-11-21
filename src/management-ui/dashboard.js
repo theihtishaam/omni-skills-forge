@@ -1,3 +1,5 @@
+import { createSkillBuilder } from './skill-builder.js';
+
 const el = id => document.getElementById(id);
 const agentLabels = {
   codex: 'Codex',
@@ -8,6 +10,22 @@ const agentLabels = {
   opencode: 'OpenCode',
   windsurf: 'Windsurf',
   portable: 'Portable',
+};
+const categoryLabels = {
+  'ai-ml': 'AI & ML',
+  'web-dev': 'Web development',
+  'computer-vision': 'Computer vision',
+  cicd: 'CI/CD',
+  csharp: 'C#',
+  gcp: 'Google Cloud',
+  aws: 'AWS',
+  llm: 'LLMs',
+  mlops: 'MLOps',
+  nextjs: 'Next.js',
+  nodejs: 'Node.js',
+  nosql: 'NoSQL',
+  rag: 'RAG',
+  sql: 'SQL',
 };
 const format = new Intl.NumberFormat('en-US');
 const deliveryTime = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' });
@@ -35,7 +53,7 @@ const state = {
   task: null,
   workspace: null,
   catalog: null,
-  filters: { query: '', filter: 'all', page: 1 },
+  filters: { query: '', filter: 'all', category: '', page: 1 },
 };
 
 class DashboardError extends Error {
@@ -83,6 +101,7 @@ function empty(list, text) {
 }
 
 function rememberRevision(revision) {
+  if (state.revision !== null && revision > state.revision) builder.invalidate();
   state.revision = Math.max(state.revision ?? 0, revision);
 }
 
@@ -120,6 +139,7 @@ function updateButtons() {
   el('download').disabled = !usablePlan() || !state.plan.markdown || !formMatchesTask();
   el('agent').disabled = !state.ready || state.saving || state.workspaceLoading;
   el('delivery-view').disabled = !state.ready;
+  el('catalog-category').disabled = !state.ready || state.saving;
   el('scope').disabled = state.saving;
   el('selected-list').setAttribute('aria-busy', String(state.taskLoading));
   el('suggested-list').setAttribute('aria-busy', String(state.workspaceLoading));
@@ -147,36 +167,46 @@ function editScopeLabel() {
   return state.scope === 'project' ? 'all agents' : agentLabels[state.agent];
 }
 
-function statusControl(skill, list, revision) {
+function categoryLabel(category) {
+  return category.split('/').map(part => categoryLabels[part] ?? part[0].toUpperCase() + part.slice(1)).join(' / ');
+}
+
+function blockedLabel(rule) {
+  const label = rule.scope === 'project' ? 'all agents' : agentLabels[state.agent];
+  return 'Disabled for ' + label + (rule.category ? ' by ' + categoryLabel(rule.category) : '');
+}
+
+function statusControl(entry, list, revision, kind = 'skill') {
   const isProject = state.scope === 'project';
-  const configured = isProject ? skill.projectStatus : skill.agentStatus;
-  const blocked = !isProject && skill.projectStatus === 'disabled';
+  const configured = isProject ? entry.projectStatus : entry.agentStatus;
+  const blocked = isProject ? entry.projectBlock : entry.agentBlock;
   const enabled = !blocked && configured !== 'disabled';
   const label = blocked || configured === 'disabled' ? 'Disabled' : configured === 'enabled' ? 'Enabled' : 'Eligible';
-  const key = skill.path + ' · ' + skill.difficulty;
+  const key = kind === 'category' ? categoryLabel(entry.category) : entry.path + ' · ' + entry.difficulty;
   const control = node('div', 'skill-preference');
   const toggle = node('button', 'switch');
   toggle.type = 'button';
   toggle.setAttribute('role', 'switch');
   toggle.setAttribute('aria-checked', String(enabled));
   toggle.setAttribute('aria-label', 'Allow ' + key + ' for ' + editScopeLabel());
-  toggle.dataset.path = skill.path;
-  toggle.disabled = blocked || state.saving || revision !== state.revision;
+  if (kind === 'category') toggle.dataset.category = entry.category;
+  else toggle.dataset.path = entry.path;
+  toggle.disabled = Boolean(blocked) || state.saving || revision !== state.revision;
   const track = node('span', 'switch-track');
   track.setAttribute('aria-hidden', 'true');
   toggle.append(track, node('span', '', label));
-  toggle.addEventListener('click', () => savePreference(skill, enabled ? 'disabled' : 'enabled', list));
+  toggle.addEventListener('click', () => savePreference(entry, enabled ? 'disabled' : 'enabled', list, kind));
   control.append(toggle);
-  if (blocked) control.append(node('span', 'inherited', 'Disabled for all agents'));
-  if (isProject && enabled && skill.agentStatus === 'disabled') {
-    control.append(node('span', 'inherited', 'Disabled for ' + agentLabels[state.agent]));
+  if (blocked) control.append(node('span', 'inherited', blockedLabel(blocked)));
+  else if (isProject && enabled && entry.effective.status === 'disabled') {
+    control.append(node('span', 'inherited', blockedLabel(entry.effective)));
   }
   if (configured !== 'default') {
     const reset = node('button', 'reset', 'Reset');
     reset.type = 'button';
     reset.disabled = state.saving || revision !== state.revision;
     reset.setAttribute('aria-label', 'Reset ' + key + ' preference for ' + editScopeLabel());
-    reset.addEventListener('click', () => savePreference(skill, 'default', list));
+    reset.addEventListener('click', () => savePreference(entry, 'default', list, kind));
     control.append(reset);
   }
   return control;
@@ -187,9 +217,11 @@ function row(skill, list, revision, type) {
   const text = node('div');
   text.append(node('h3', 'skill-name', skill.name));
   const details = node('div', 'skill-meta');
+  const workspaceSkill = skill.kind === 'workspace' || skill.path.startsWith('workspace/');
   const category = node('span', '', skill.category);
   category.title = skill.path;
-  details.append(category, node('span', '', '·'), node('span', '', skill.difficulty));
+  if (workspaceSkill) details.append(node('span', 'skill-state active', 'Workspace skill'));
+  else details.append(category, node('span', '', '·'), node('span', '', skill.difficulty));
   if (skill.eligibility === 'disabled') details.append(node('span', 'skill-state', 'Disabled by policy'));
   else if (type === 'suggested') details.append(node('span', 'skill-state', 'Standby'));
   else if (type === 'selected') details.append(node('span', 'skill-state active', 'Selected'));
@@ -199,7 +231,20 @@ function row(skill, list, revision, type) {
   text.append(details);
   const reason = Array.isArray(skill.reason) ? skill.reason.join(' · ') : skill.reason;
   if (reason || skill.description) text.append(node('p', 'skill-reason', reason || skill.description));
-  row.append(text, statusControl(skill, list, revision));
+  row.append(text);
+  if (workspaceSkill) {
+    if (skill.sourcePaths?.length) {
+      const provenance = node('details', 'skill-reason');
+      const paths = node('ul');
+      for (const path of skill.sourcePaths) paths.append(node('li', '', path));
+      provenance.append(node('summary', '', skill.sourcePaths.length + ' catalog sources'), paths);
+      text.append(provenance);
+    }
+  } else {
+    const controls = statusControl(skill, list, revision);
+    if (type !== 'suggested') controls.append(builder.sourceAction(skill));
+    row.append(controls);
+  }
   return row;
 }
 
@@ -229,6 +274,7 @@ function renderPlan() {
   } else {
     list.replaceChildren(...plan.matches.map(skill => row(skill, list, plan.revision, 'selected')));
   }
+  builder.update();
   updateButtons();
 }
 
@@ -386,6 +432,20 @@ function renderCatalog() {
   const result = state.catalog;
   const list = el('catalog-list');
   el('catalog-scope').textContent = 'Showing eligibility for ' + agentLabels[state.agent] + ' · editing preferences for ' + editScopeLabel();
+  const count = el('category-counts');
+  const category = state.filters.category;
+  const preference = el('category-preference');
+  el('category-policy-heading').textContent = 'Category preference for ' + editScopeLabel();
+  count.textContent = state.catalogLoading || !result ? '' :
+    format.format(result.counts.category) + ' skills · ' + format.format(result.counts.categoryDisabled) +
+    ' disabled for ' + agentLabels[state.agent];
+  if (!category) {
+    preference.replaceChildren(node('p', 'field-note', 'Choose a family or category to edit its preference.'));
+  } else if (state.catalogLoading || result?.categoryPreference?.category !== category) {
+    preference.replaceChildren(node('p', 'field-note', state.catalogLoading ? 'Loading category preference…' : 'Filter the catalog to load this preference.'));
+  } else {
+    preference.replaceChildren(statusControl(result.categoryPreference, preference, result.revision, 'category'));
+  }
   if (state.catalogLoading || !result) {
     empty(list, state.catalogLoading ? 'Loading skills…' : 'Run a catalog filter to load skills.');
     el('page-summary').textContent = '';
@@ -467,7 +527,7 @@ async function runTask(reschedule = true) {
   }
 }
 
-async function savePreference(skill, status, list) {
+async function savePreference(entry, status, list, kind) {
   if (state.saving) return;
   showError();
   state.saving = true;
@@ -476,9 +536,12 @@ async function savePreference(skill, status, list) {
   renderWorkspace();
   const scopeLabel = editScopeLabel();
   const agent = state.scope === 'project' ? undefined : state.agent;
+  const category = kind === 'category';
+  const route = category ? '/api/category-preferences' : '/api/preferences';
+  const target = category ? { category: entry.category } : { path: entry.path };
   let errorMessage;
   try {
-    const result = await api('/api/preferences', { path: skill.path, status, agent, expectedRevision: state.revision });
+    const result = await api(route, { ...target, status, agent, expectedRevision: state.revision });
     rememberRevision(result.revision);
   } catch (error) {
     errorMessage = error.status === 409 ? 'Another dashboard changed these preferences. Review the refreshed settings and try again.' : error.message;
@@ -491,9 +554,11 @@ async function savePreference(skill, status, list) {
     renderCatalog();
     renderWorkspace();
     if (errorMessage) showError(errorMessage);
-    else announce(skill.name + ' preference saved for ' + scopeLabel + '.');
-    const restoredSwitch = [...list.querySelectorAll('.switch')].find(control => control.dataset.path === skill.path);
+    else announce((category ? categoryLabel(entry.category) : entry.name) + ' preference saved for ' + scopeLabel + '.');
+    const restoredSwitch = [...list.querySelectorAll('.switch')].find(control => category
+      ? control.dataset.category === entry.category : control.dataset.path === entry.path);
     if (restoredSwitch && !restoredSwitch.disabled) restoredSwitch.focus({ preventScroll: true });
+    else if (category) el('catalog-category').focus({ preventScroll: true });
     else if (list === el('selected-list')) el('run').focus({ preventScroll: true });
     else if (list === el('suggested-list')) el('inspect-folder').focus({ preventScroll: true });
     else el('catalog-filter').focus({ preventScroll: true });
@@ -527,27 +592,33 @@ el('task-form').addEventListener('submit', event => {
 el('task-form').addEventListener('input', () => {
   updateSelectionNote();
   updateButtons();
+  builder.update();
 });
 el('task-form').addEventListener('invalid', () => {
   el('advanced').open = true;
 }, true);
 
-el('download').addEventListener('click', () => {
-  if (!usablePlan() || !state.plan.markdown || !formMatchesTask()) return;
-  const url = URL.createObjectURL(new Blob([state.plan.markdown], { type: 'text/markdown;charset=utf-8' }));
+function downloadMarkdown(markdown, filename) {
+  const url = URL.createObjectURL(new Blob([markdown], { type: 'text/markdown;charset=utf-8' }));
   const link = node('a');
   link.href = url;
-  link.download = 'omni-task-context-' + state.agent + '.md';
+  link.download = filename;
   document.body.append(link);
   link.click();
   link.remove();
   setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+
+el('download').addEventListener('click', () => {
+  if (!usablePlan() || !state.plan.markdown || !formMatchesTask()) return;
+  downloadMarkdown(state.plan.markdown, 'omni-task-context-' + state.agent + '.md');
 });
 
 el('agent').addEventListener('change', () => {
   showError();
   const directory = state.workspace?.workspace.directory ?? '.';
   state.agent = el('agent').value;
+  builder.update();
   state.filters.page = 1;
   state.catalog = null;
   renderCatalog();
@@ -574,7 +645,12 @@ document.addEventListener('visibilitychange', () => {
 
 function applyFilters() {
   showError();
-  state.filters = { query: el('catalog-query').value.trim(), filter: el('catalog-filter').value, page: 1 };
+  state.filters = {
+    query: el('catalog-query').value.trim(),
+    filter: el('catalog-filter').value,
+    category: el('catalog-category').value,
+    page: 1,
+  };
   void loadCatalog();
 }
 
@@ -583,9 +659,11 @@ el('catalog-form').addEventListener('submit', event => {
   applyFilters();
 });
 el('catalog-filter').addEventListener('change', applyFilters);
+el('catalog-category').addEventListener('change', applyFilters);
 el('disabled-link').addEventListener('click', () => {
   el('catalog-query').value = '';
   el('catalog-filter').value = 'disabled';
+  el('catalog-category').value = '';
   applyFilters();
 });
 for (const [id, change] of [['previous', -1], ['next', 1]]) {
@@ -609,6 +687,20 @@ async function start() {
     }));
     if (!project.agents.includes(state.agent)) state.agent = project.agents[0];
     el('agent').value = state.agent;
+    const categories = el('catalog-category');
+    for (const group of project.categoryGroups) {
+      const options = node('optgroup');
+      options.label = categoryLabel(group.family);
+      const family = node('option', '', 'All ' + options.label);
+      family.value = group.family;
+      options.append(family);
+      for (const category of group.categories) {
+        const option = node('option', '', categoryLabel(category.split('/').at(-1)));
+        option.value = category;
+        options.append(option);
+      }
+      categories.append(options);
+    }
     el('task-query').maxLength = project.limits.maxQueryLength;
     el('max-skills').max = project.limits.maxSkills;
     el('max-skills').defaultValue = project.limits.defaultMaxSkills;
@@ -616,10 +708,20 @@ async function start() {
     el('token-budget').defaultValue = project.limits.defaultTokenBudget;
     state.ready = true;
     updateButtons();
-    await Promise.all([loadCatalog(), loadWorkspace('.', true), refreshDeliveries(true)]);
+    await Promise.all([loadCatalog(), loadWorkspace('.', true), refreshDeliveries(true), builder.loadLibrary()]);
   } catch (error) {
     showError(error.message);
     el('project-name').textContent = 'Project unavailable';
   }
 }
+const builder = createSkillBuilder({
+  api,
+  activeAgent: () => state.agent,
+  agentLabel: agent => agentLabels[agent] ?? agent,
+  taskMatches: () => usablePlan() && formMatchesTask() ? state.plan.matches : [],
+  taskQuery: () => state.task?.query ?? '',
+  rerenderRows: () => { renderCatalog(); renderPlan(); },
+  refreshTask: () => { void runTask(); },
+  download: downloadMarkdown,
+});
 void start();
