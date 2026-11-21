@@ -28,7 +28,7 @@ test('real task matching is deterministic, deduplicated, bounded, and preview st
   assert.match(first.matches[0].path, /^web-dev\/react\/react-accessibility-a11y-/u);
   assert.match(first.matches[0].reason, /accessibility/u);
   const skill = await readFile(new URL(`../skills/${first.matches[0].path}`, import.meta.url), 'utf8');
-  assert.ok(first.markdown.includes(skill.trim()));
+  assert.ok(first.markdown.includes(skill.replace(/\r\n/g, '\n').trim()));
   assert.equal(first.estimatedTokens, Math.ceil(Buffer.byteLength(first.markdown) / 4));
   assert.ok(first.estimatedTokens <= 1400);
   assert.deepEqual(await selectSkills({ project, query: task, tokenBudget: 1400, maxSkills: 1 }), first);
