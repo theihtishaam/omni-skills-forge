@@ -1,37 +1,36 @@
-![Omni Skills Forge. 50,009 Markdown skill files across 28 category paths and six installer targets.](https://raw.githubusercontent.com/theihtishaam/omni-skills-forge/main/assets/banner.svg)
-
 # Omni Skills Forge
 
-<a href="https://trendshift.io"><img src="https://img.shields.io/badge/Trendshift-Explore%20trending%20projects-6366f1?style=for-the-badge" alt="Explore trending projects on Trendshift" /></a>
+Find and install Markdown skills for your coding agent. Search **50,009 skill files across 28 category paths**, inspect a skill's source and difficulty, and copy it to a directory you choose. The `osf` CLI also generates a local catalog dashboard and exports the full registry as JSON or CSV.
 
-<a href="https://www.npmjs.com/package/omni-skills-forge"><img src="https://img.shields.io/npm/dt/omni-skills-forge?label=Total%20Downloads&amp;color=brightgreen" alt="Total npm downloads (all time)" /></a>
-<a href="https://github.com/theihtishaam/omni-skills-forge"><img src="https://img.shields.io/github/stars/theihtishaam/omni-skills-forge?label=Star%20on%20GitHub&amp;style=social" alt="Star omni-skills-forge on GitHub" /></a>
+[![Star Omni Skills Forge on GitHub](https://img.shields.io/github/stars/theihtishaam/omni-skills-forge?label=Star%20on%20GitHub&style=for-the-badge&logo=github)](https://github.com/theihtishaam/omni-skills-forge)
+[![Follow @theihtishaam on GitHub](https://img.shields.io/github/followers/theihtishaam?label=Follow%20%40theihtishaam&style=for-the-badge&logo=github)](https://github.com/theihtishaam)
 
-Created by [Ihtisham (@theihtishaam)](https://github.com/theihtishaam). [Explore the source and star Omni Skills Forge](https://github.com/theihtishaam/omni-skills-forge).
+[Browse the source and star Omni Skills Forge](https://github.com/theihtishaam/omni-skills-forge) · [Follow creator Ihtisham Ahmad on GitHub](https://github.com/theihtishaam)
 
-[![Follow Ihtisham on GitHub](https://img.shields.io/badge/Follow-Ihtisham%20Ahmad-7dd3fc?logo=github&logoColor=white&labelColor=111c32)](https://github.com/theihtishaam)
 [![npm version](https://img.shields.io/npm/v/omni-skills-forge?color=eab66e&logo=npm)](https://www.npmjs.com/package/omni-skills-forge)
+[![Total npm downloads (all time)](https://img.shields.io/npm/dt/omni-skills-forge?label=Total%20Downloads&color=brightgreen)](https://www.npmjs.com/package/omni-skills-forge)
 [![MIT license](https://img.shields.io/badge/license-MIT-7dd3fc)](LICENSE)
-
-Search a local catalog of Markdown instructions for coding agents, inspect the source, and copy the files you choose. The CLI filters by category, tag, or difficulty and offers six installer targets.
+[![Explore trending projects on Trendshift](https://img.shields.io/badge/Trendshift-Explore%20trending%20projects-6366f1)](https://trendshift.io)
 
 [Quick start](#quick-start) · [All 28 category paths](docs/CATEGORIES.md) · [Installer targets](#installer-targets) · [CLI reference](#cli-reference) · [Source provenance](docs/PROVENANCE.md)
 
+![Omni Skills Forge. 50,009 Markdown skill files across 28 category paths and six installer targets.](https://raw.githubusercontent.com/theihtishaam/omni-skills-forge/main/assets/banner.svg)
+
 ## Quick start
 
-Use Node.js 18 or later. Start with one skill and review the copied file before configuring your agent.
+Use Node.js 18 or later. Try a React accessibility skill and review the copied file before configuring your agent.
 
 ![Find a skill with search, inspect its path and difficulty, and copy it to a chosen directory.](https://raw.githubusercontent.com/theihtishaam/omni-skills-forge/main/assets/workflow.svg)
 
 ```bash
 npm install -g omni-skills-forge
-osf search kubernetes --limit 8
-osf info kubernetes-admission-controllers-advanced
-osf install --skill kubernetes-admission-controllers-advanced --tool cursor --dir ./sample-directory --dry-run
-osf install --skill kubernetes-admission-controllers-advanced --tool cursor --dir ./sample-directory
+osf search react-accessibility --limit 8
+osf info react-accessibility-a11y-best-practices
+osf install --skill react-accessibility-a11y-best-practices --tool cursor --dir ./sample-directory --dry-run
+osf install --skill react-accessibility-a11y-best-practices --tool cursor --dir ./sample-directory
 ```
 
-`--dir` sets the output root. The installer preserves each file’s relative category path and uses the selected target’s extension. The Cursor example writes an `.mdc` file under `./sample-directory/devops/kubernetes`. Install previews skip file writes and can create directories. The existing installer rewrites matching destination files, so use a new output directory while reviewing.
+`--dir` sets the output root. The installer preserves each file’s relative category path and uses the selected target’s extension. The Cursor example writes an `.mdc` file under `./sample-directory/web-dev/react`. Install previews skip file writes and can create directories. The existing installer rewrites matching destination files, so use a new output directory while reviewing.
 
 The registry contains several difficulty variants with the same name. `info` and `install --skill` choose the first exact name match, then fall back to a substring. Check the path and difficulty with `info` before copying. For exact file selection, open the [category directory](docs/CATEGORIES.md) and copy the specific source file.
 
@@ -91,6 +90,10 @@ Use an explicit `--tool` and `--dir` to control where files go. `--all` selects 
 The dashboard filters the sample cards embedded in its generated HTML. Use `osf search` or `osf list --json` to search or export the full catalog. Dashboard copy buttons copy a CLI command. Review its destination before running it.
 
 The `uninstall` command scans the default client directories and removes matching Markdown or rule files, including files from other sources. Use `osf uninstall --tool cursor --dry-run` to inspect the scope. For a custom `--dir` install, manage that output folder directly.
+
+## Related project
+
+[Agent Shadow Brain](https://github.com/theihtishaam/agents-brain) gives coding agents shared project memory for decisions, context, and session handoffs.
 
 ## Source and license
 

@@ -326,7 +326,7 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,-ap
 
   <!-- Footer -->
   <div class="footer">
-    <p>Omni Skills Forge v2.1.4 · Created by <a href="https://github.com/theihtishaam" target="_blank" rel="noopener noreferrer">@theihtishaam</a></p>
+    <p>Omni Skills Forge v2.1.5 · Created by <a href="https://github.com/theihtishaam" target="_blank" rel="noopener noreferrer">@theihtishaam</a></p>
     <p style="margin-top:8px"><a href="https://www.npmjs.com/package/omni-skills-forge">npm</a> · <a href="https://github.com/theihtishaam/omni-skills-forge" target="_blank" rel="noopener noreferrer">Star Omni Skills Forge on GitHub</a> · Generated ${data.generatedAt}</p>
   </div>
 </div>

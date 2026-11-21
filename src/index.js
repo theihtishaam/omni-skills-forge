@@ -8,5 +8,5 @@ export { OmniUI } from './ui.js';
 export { OmniDashboard } from './dashboard.js';
 export { OmniDoctor } from './doctor.js';
 
-export const VERSION = '2.1.4';
+export const VERSION = '2.1.5';
 export const SUPPORTED_TOOLS = ['claude-code', 'kilo', 'cline', 'opencode', 'cursor', 'windsurf'];
