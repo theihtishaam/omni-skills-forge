@@ -12,26 +12,35 @@ export class OmniUI {
   async runInteractive() {
     console.log(boxen(
       chalk.cyan.bold('⚡ Omni Skills Forge — Interactive Setup') + '\n' +
-      chalk.gray('50,000+ expert AI agent skills'),
+      chalk.gray('Find skills for the project you are working on.'),
       { padding: 1, borderColor: 'cyan', borderStyle: 'round' }
     ));
 
     const { mode } = await inquirer.prompt([{
       type: 'list', name: 'mode', message: 'What would you like to do?',
       choices: [
-        { name: '🚀 Install All (50,000+ skills — single click)', value: 'all' },
+        { name: 'Open workspace dashboard · choose relevant skills', value: 'workspace' },
         { name: '📂 Browse by Category', value: 'category' },
         { name: '🏷️  Filter by Tag', value: 'tag' },
         { name: '📊 Filter by Difficulty', value: 'difficulty' },
         { name: '🔍 Search & Install', value: 'search' },
         { name: '📈 View Stats', value: 'stats' },
         new inquirer.Separator(),
-        { name: '🖥️  Open Visual Dashboard', value: 'dashboard' },
+        { name: 'Export a browsable catalog', value: 'dashboard' },
         { name: '🩺 Run Doctor (diagnose tools)', value: 'doctor' },
+        { name: 'Copy the entire skill catalog to a tool', value: 'all' },
       ]
     }]);
 
     if (mode === 'stats') { await this.installer.showStats(); return; }
+    if (mode === 'workspace') {
+      const { startManagementDashboard } = await import('./management-dashboard.js');
+      const dashboard = await startManagementDashboard({ projectRoot: process.cwd() });
+      console.log('Workspace dashboard: ' + dashboard.url);
+      const open = (await import('open')).default;
+      try { await open(dashboard.url); } catch {}
+      return;
+    }
     if (mode === 'dashboard') {
       const { OmniDashboard } = await import('./dashboard.js');
       const registry = await this.installer._loadRegistry();
@@ -65,7 +74,7 @@ export class OmniUI {
 
     switch (mode) {
       case 'all': {
-        const { confirm } = await inquirer.prompt([{ type: 'confirm', name: 'confirm', message: 'Install all 50,000+ skills?', default: true }]);
+        const { confirm } = await inquirer.prompt([{ type: 'confirm', name: 'confirm', message: 'Copy all 50,009 skill files to the selected tool?', default: false }]);
         if (confirm) await this.installer.installAll(opts);
         break;
       }

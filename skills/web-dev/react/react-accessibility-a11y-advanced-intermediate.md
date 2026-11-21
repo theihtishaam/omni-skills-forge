@@ -7,39 +7,45 @@ tags: ["react","accessibility-a11y","advanced","intermediate"]
 tools: ["claude-code","kilo","cline","opencode","cursor","windsurf"]
 description: "react accessibility-a11y advanced at intermediate level"
 ---
-# React Accessibility A11y — Intermediate
+# Keyboard accessibility for React forms
 
-## Role
-You are an experienced developer with production experience in this technology.
+1. Use native inputs, buttons, and links so the browser supplies keyboard behavior. Mark auxiliary buttons `type="button"` and use `type="submit"` for submission.
+2. Keep DOM order consistent with the intended reading and tab order. Use a visible `:focus-visible` indicator and check that sticky headers or scroll containers leave the focused control visible. Avoid positive `tabIndex`.
+3. Give each field a visible label. Associate help and error text with `aria-describedby`, and set `aria-invalid` when validation reports an error. Use `fieldset` and `legend` to name groups of related controls.
+4. After a failed custom validation attempt, render the error, preserve entered values, and move focus to the first invalid control or to an error summary that links to each affected field.
 
-## Core Competencies
-Provide practical patterns with trade-off analysis. Show before/after code examples. Cover error handling and edge cases.
+```jsx
+import { useId } from 'react';
 
-### Accessibility A11y — advanced
+export function ContactEmailField({ error }) {
+  const id = useId();
+  const helpId = `${id}-help`;
+  const errorId = `${id}-error`;
 
-This skill covers advanced patterns for accessibility-a11y in react.
-
-#### Key Principles
-- Always start with the simplest solution that works
-- Measure before optimizing
-- Handle errors gracefully at every layer
-- Write tests for critical paths
-- Document why, not what
-
-#### Code Example
-
+  return (
+    <div>
+      <label htmlFor={id}>Contact email</label>
+      <input
+        id={id}
+        name="email"
+        type="email"
+        autoComplete="email"
+        required
+        aria-invalid={error ? true : undefined}
+        aria-describedby={error ? `${helpId} ${errorId}` : helpId}
+      />
+      <p id={helpId}>Use an address you check regularly.</p>
+      {error && <p id={errorId}>{error}</p>}
+    </div>
+  );
+}
 ```
-// react accessibility-a11y advanced pattern
-// Adapt this to your specific react project's conventions
-// This is a reference implementation — modify for your use case
-```
 
-## Anti-Patterns
-- Over-engineering simple problems with complex patterns
-- Ignoring error handling and edge cases
-- Not measuring performance before optimizing
-- Skipping tests for critical paths
-- Hardcoding configuration values
-- Not considering security implications
-- Copying patterns without understanding trade-offs
-- Not planning for observability and debugging
+## Acceptance checks
+
+- Use Tab and Shift+Tab through the whole form. Every control is reachable in a meaningful order, with visible focus and a way to leave each control.
+- Activate buttons with Enter and Space. Press Enter from a valid single-line field to check that the form submits through its normal handler.
+- Submit invalid data. The affected field has a text error with a correction, focus lands at a useful place, and already-entered data remains available.
+- Check the field with a screen reader. Its name, required state, help, and any current error are available when the field receives focus.
+
+[React useId](https://react.dev/reference/react/useId) · [W3C form labels and errors](https://www.w3.org/WAI/tutorials/forms/notifications/) · [WCAG focus order](https://www.w3.org/WAI/WCAG22/Understanding/focus-order.html) · [WCAG visible focus](https://www.w3.org/WAI/WCAG22/Understanding/focus-visible.html)

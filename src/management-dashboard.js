@@ -11,15 +11,19 @@ import {
   MAX_SELECTION_QUERY_LENGTH,
   MAX_SELECTION_SKILLS,
   MAX_SELECTION_TOKEN_BUDGET,
+  recommendWorkspaceSkills,
   resolveSkillProject,
   SELECTION_AGENTS,
   selectSkills,
   setSkillSelectionState,
 } from './skill-selection.js';
+import { listSkillDeliveries } from './skill-delivery.js';
 
 const HOST = '127.0.0.1';
 const MAX_BODY_BYTES = 32 * 1024;
 const CATALOG_PAGE_SIZE = 8;
+const WORKSPACE_SUGGESTIONS = 3;
+const RECENT_DELIVERIES = 5;
 const BROWSE_FILTERS = new Set(['all', 'eligible', 'disabled']);
 const UI_ASSETS = [
   ['/', 'index.html', 'text/html; charset=utf-8'],
@@ -160,6 +164,7 @@ export async function startManagementDashboard({ projectRoot = process.cwd(), po
     searchable: [skill.name, skill.category, skill.difficulty, skill.description, ...(skill.tags ?? [])]
       .join(' ').toLowerCase().replace(/[-_/]+/gu, ' '),
   }));
+  const skillsByPath = new Map(skills.map(skill => [skill.file, skill]));
 
   let authority;
   let url;
@@ -205,11 +210,48 @@ export async function startManagementDashboard({ projectRoot = process.cwd(), po
           json(response, 200, catalogPage(catalog, state, target.searchParams));
           return;
         }
+        if (route === '/api/deliveries') {
+          const agent = parseAgent(target.searchParams.get('agent'));
+          const records = await listSkillDeliveries({ project, agent });
+          const summarize = ({ agent, method, directory, at, paths }) => ({
+            agent, method, directory, at,
+            skills: paths.map(skillPath => ({ path: skillPath, name: skillsByPath.get(skillPath)?.name ?? skillPath })),
+          });
+          const payload = { records: records.slice(0, RECENT_DELIVERIES).map(summarize) };
+          if (!agent) {
+            const latest = new Map();
+            for (const record of records) {
+              if (!latest.has(record.agent)) latest.set(record.agent, summarize(record));
+            }
+            payload.latestByAgent = [...latest.values()];
+          }
+          json(response, 200, payload);
+          return;
+        }
+      }
+      if (request.method === 'POST' && route === '/api/workspace') {
+        const { directory, agent: rawAgent } = await readJson(request);
+        const agent = parseAgent(rawAgent);
+        const options = { project, directory, agent, maxSkills: WORKSPACE_SUGGESTIONS };
+        let suggestions = await recommendWorkspaceSkills(options);
+        let state = await loadSkillSelectionState({ project });
+        if (suggestions.revision !== state.revision) {
+          suggestions = await recommendWorkspaceSkills(options);
+          state = await loadSkillSelectionState({ project });
+          if (suggestions.revision !== state.revision) {
+            throw badRequest('Project preferences changed while finding folder suggestions. Inspect the folder again.', 409);
+          }
+        }
+        json(response, 200, {
+          ...suggestions,
+          suggestions: suggestions.suggestions.map(skill => ({ ...skill, ...mapStatus(state, skill.path, agent) })),
+        });
+        return;
       }
       if (request.method === 'POST' && route === '/api/select') {
-        const { query, tokenBudget, maxSkills, agent: rawAgent } = await readJson(request);
+        const { query, tokenBudget, maxSkills, directory, agent: rawAgent } = await readJson(request);
         const agent = parseAgent(rawAgent);
-        const options = { project, query, tokenBudget, maxSkills, agent };
+        const options = { project, query, tokenBudget, maxSkills, directory, agent };
         let selection = await selectSkills(options);
         let state = await loadSkillSelectionState({ project });
         if (selection.revision !== state.revision) {

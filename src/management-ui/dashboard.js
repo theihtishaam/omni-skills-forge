@@ -10,18 +10,30 @@ const agentLabels = {
   portable: 'Portable',
 };
 const format = new Intl.NumberFormat('en-US');
+const deliveryTime = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+const DELIVERY_REFRESH_MS = 15_000;
+const AGENT_SETUP_URL = 'https://github.com/theihtishaam/omni-skills-forge/blob/v2.3.0/docs/TASK_SKILLS.md#run-automatically-on-a-submitted-prompt';
 const state = {
+  projectName: '',
   agent: 'codex',
   scope: 'agent',
   ready: false,
   saving: false,
   taskLoading: false,
   catalogLoading: false,
+  workspaceLoading: false,
   taskRequest: 0,
   catalogRequest: 0,
+  workspaceRequest: 0,
+  deliveryRequest: 0,
+  deliveryView: 'selected',
+  deliveryTimer: null,
+  deliveryLoading: false,
+  latestDeliveryKey: null,
   revision: null,
   plan: null,
   task: null,
+  workspace: null,
   catalog: null,
   filters: { query: '', filter: 'all', page: 1 },
 };
@@ -83,30 +95,52 @@ function usablePlan() {
 
 function formMatchesTask() {
   return state.task &&
+    state.workspace?.workspace.directory === state.task.directory &&
+    folderFieldIsCurrent() &&
     el('task-query').value.trim() === state.task.query &&
     el('token-budget').valueAsNumber === state.task.tokenBudget &&
     el('max-skills').valueAsNumber === state.task.maxSkills;
 }
 
+function folderFieldIsCurrent() {
+  return state.workspace?.workspace.directory === el('folder-path').value.trim();
+}
+
+function updateFolderNote() {
+  const folder = state.workspace?.workspace.directory;
+  el('folder-note').textContent = folder && !folderFieldIsCurrent()
+    ? 'Currently showing ' + displayFolder(folder) + '. Inspect the new path to switch folders.'
+    : 'Use a path inside this workspace. A dot selects its root.';
+}
+
 function updateButtons() {
-  el('run').disabled = !state.ready || state.taskLoading || state.saving;
+  el('inspect-folder').disabled = !state.ready || state.saving || state.workspaceLoading;
+  el('run').disabled = !state.ready || !folderFieldIsCurrent() || !el('task-query').value.trim() ||
+    state.taskLoading || state.saving || state.workspaceLoading;
   el('download').disabled = !usablePlan() || !state.plan.markdown || !formMatchesTask();
-  el('agent').disabled = !state.ready || state.saving;
+  el('agent').disabled = !state.ready || state.saving || state.workspaceLoading;
+  el('delivery-view').disabled = !state.ready;
   el('scope').disabled = state.saving;
   el('selected-list').setAttribute('aria-busy', String(state.taskLoading));
+  el('suggested-list').setAttribute('aria-busy', String(state.workspaceLoading));
   el('catalog-list').setAttribute('aria-busy', String(state.catalogLoading));
   el('previous').disabled = state.catalogLoading || !state.catalog || state.catalog.page <= 1;
   el('next').disabled = state.catalogLoading || !state.catalog || state.catalog.page * state.catalog.pageSize >= state.catalog.total;
 }
 
 function updateSelectionNote() {
-  let note = 'Review the matches before taking them into your agent.';
+  let note = 'Preview skill text before downloading it.';
   if (state.plan) {
-    note = formMatchesTask()
-      ? 'Task context for ' + agentLabels[state.agent] + ' · editing preferences for ' + editScopeLabel()
-      : 'Find relevant skills again to apply your edits.';
+    if (!folderFieldIsCurrent()) note = 'Inspect this folder before previewing task skills.';
+    else if (!formMatchesTask()) note = 'Preview task skills again to apply your edits.';
+    else note = 'Preview for ' + agentLabels[state.agent] + ' · ' + displayFolder(state.task.directory) +
+      ' · editing preferences for ' + editScopeLabel();
   }
   el('selection-note').textContent = note;
+}
+
+function displayFolder(directory) {
+  return directory === '.' ? state.projectName : state.projectName + ' / ' + directory;
 }
 
 function editScopeLabel() {
@@ -148,7 +182,7 @@ function statusControl(skill, list, revision) {
   return control;
 }
 
-function row(skill, list, revision) {
+function row(skill, list, revision, type) {
   const row = node('article', 'skill-row');
   const text = node('div');
   text.append(node('h3', 'skill-name', skill.name));
@@ -156,6 +190,9 @@ function row(skill, list, revision) {
   const category = node('span', '', skill.category);
   category.title = skill.path;
   details.append(category, node('span', '', '·'), node('span', '', skill.difficulty));
+  if (skill.eligibility === 'disabled') details.append(node('span', 'skill-state', 'Disabled by policy'));
+  else if (type === 'suggested') details.append(node('span', 'skill-state', 'Standby'));
+  else if (type === 'selected') details.append(node('span', 'skill-state active', 'Selected'));
   if (skill.estimatedTokens !== undefined) {
     details.append(node('span', 'estimate', '≈ ' + format.format(skill.estimatedTokens) + ' tokens'));
   }
@@ -173,6 +210,7 @@ function renderPlan() {
   const limit = plan?.maxSkills ?? state.task?.maxSkills ?? 3;
   const count = plan?.matches.length ?? 0;
   const list = el('selected-list');
+  el('selection').hidden = !state.task;
   el('used-tokens').textContent = format.format(used);
   el('budget-total').textContent = '/ ' + format.format(capacity) + ' est. tokens';
   el('budget-progress').max = capacity;
@@ -183,15 +221,165 @@ function renderPlan() {
   if (state.taskLoading) {
     empty(list, 'Finding relevant skills for ' + agentLabels[state.agent] + '…');
   } else if (!plan) {
-    empty(list, 'Describe a task and choose Find relevant skills to create a shortlist.');
+    empty(list, 'Choose Preview task skills to try again.');
   } else if (!plan.matches.length) {
     empty(list, 'No eligible skills fit this task and budget. Try a more specific task, a larger budget, or review disabled skills.');
   } else if (!state.saving && !usablePlan()) {
     empty(list, 'Project preferences changed. Run the task again to refresh its context.');
   } else {
-    list.replaceChildren(...plan.matches.map(skill => row(skill, list, plan.revision)));
+    list.replaceChildren(...plan.matches.map(skill => row(skill, list, plan.revision, 'selected')));
   }
   updateButtons();
+}
+
+function renderWorkspace() {
+  const result = state.workspace;
+  const technologies = el('technology-list');
+  const list = el('suggested-list');
+  if (state.workspaceLoading || !result) {
+    technologies.replaceChildren(node('p', 'muted small', state.workspaceLoading ? 'Checking the workspace…' : 'Inspect a folder to detect technologies.'));
+    empty(list, state.workspaceLoading ? 'Finding suggestions for this folder…' : 'Inspect a folder to see suggestions.');
+  } else {
+    technologies.replaceChildren(...result.workspace.technologies.map(technology => {
+      const chip = node('div', 'tech-chip');
+      const sources = technology.sources.map(source => source.directory === '.' ? source.file : source.directory + '/' + source.file);
+      chip.append(node('strong', '', technology.name), node('code', '', sources.join(' · ')));
+      return chip;
+    }));
+    if (!result.workspace.technologies.length) {
+      technologies.replaceChildren(node('p', 'muted small', 'No recognized project files in this folder or its parent folders.'));
+    }
+    if (result.revision !== state.revision) {
+      empty(list, 'Project preferences changed. Inspect the folder again to update suggestions.');
+    } else if (result.suggestions.length) {
+      const selected = new Set(usablePlan() ? state.plan.matches.map(skill => skill.path) : []);
+      list.replaceChildren(...result.suggestions.map(skill =>
+        row(skill, list, result.revision, selected.has(skill.path) ? 'selected' : 'suggested')));
+    } else {
+      empty(list, 'No eligible skills matched the detected stack. You can preview a task or browse the catalog.');
+    }
+  }
+  updateFolderNote();
+  updateButtons();
+}
+
+async function loadWorkspace(directory, submitted = false, reschedule = true) {
+  const call = ++state.workspaceRequest;
+  state.workspaceLoading = true;
+  renderWorkspace();
+  try {
+    const result = await api('/api/workspace', { directory, agent: state.agent });
+    if (call !== state.workspaceRequest) return;
+    if (reschedule && result.revision < (state.revision ?? 0)) return loadWorkspace(directory, submitted, false);
+    if (state.task && state.task.directory !== result.workspace.directory) {
+      state.taskRequest++;
+      state.taskLoading = false;
+      state.plan = null;
+      state.task = null;
+    }
+    state.workspace = result;
+    if (submitted) {
+      if (el('folder-path').value.trim() === directory) el('folder-path').value = result.workspace.directory;
+      announce(result.workspace.technologies.length + ' technologies detected for ' + displayFolder(result.workspace.directory) + '.');
+    }
+    rememberRevision(result.revision);
+  } catch (error) {
+    if (call === state.workspaceRequest) showError(error.message);
+  } finally {
+    if (call === state.workspaceRequest) {
+      state.workspaceLoading = false;
+      renderWorkspace();
+      renderPlan();
+      if (state.catalog && state.catalog.revision !== state.revision && !state.catalogLoading) void loadCatalog();
+    }
+  }
+}
+
+function deliveryRecord(record, showAgent = false) {
+  const article = node('article', 'delivery-record');
+  const meta = node('div', 'delivery-meta');
+  const method = record.method === 'hook' ? 'Prompt hook' : 'MCP';
+  const time = node('time', '', deliveryTime.format(new Date(record.at)));
+  time.dateTime = record.at;
+  time.title = record.at;
+  if (showAgent) meta.append(node('strong', 'delivery-agent', agentLabels[record.agent] ?? record.agent));
+  meta.append(node('span', 'delivery-method', method), time);
+  const paths = node('ul', 'delivery-skills');
+  for (const skill of record.skills) {
+    const item = node('li', '', skill.name);
+    item.title = skill.path;
+    paths.append(item);
+  }
+  article.append(meta, node('code', 'delivery-folder', displayFolder(record.directory)), paths);
+  return article;
+}
+
+function renderDeliveries(records) {
+  const list = el('delivery-list');
+  const allAgents = state.deliveryView === 'all';
+  if (!records.length) {
+    const prompt = allAgents ? 'No context delivered in this workspace yet.' :
+      'No context delivered to this agent yet. Previews appear under Selected for this task.';
+    const message = node('div', 'empty delivery-empty');
+    const connect = node('a', '', 'Connect your agent');
+    connect.href = AGENT_SETUP_URL;
+    connect.target = '_blank';
+    connect.rel = 'noopener noreferrer';
+    message.append(node('p', '', prompt), connect);
+    list.replaceChildren(message);
+    return;
+  }
+  if (allAgents) {
+    list.replaceChildren(...records.map(record => deliveryRecord(record, true)));
+    return;
+  }
+  const [latest, ...history] = records;
+  list.replaceChildren(deliveryRecord(latest));
+  if (history.length) {
+    const details = node('details', 'delivery-history');
+    details.append(node('summary', '', 'Earlier deliveries (' + history.length + ')'), ...history.map(deliveryRecord));
+    list.append(details);
+  }
+}
+
+async function refreshDeliveries(reset = false) {
+  clearTimeout(state.deliveryTimer);
+  if (document.hidden || !state.ready || (state.deliveryLoading && !reset)) return;
+  const call = ++state.deliveryRequest;
+  const list = el('delivery-list');
+  const refresh = el('refresh-delivery');
+  const allAgents = state.deliveryView === 'all';
+  el('delivery-note').textContent = allAgents ? 'Latest recorded handoff for each agent.' :
+    'Latest hook or MCP handoff for ' + agentLabels[state.agent] + '.';
+  if (reset) {
+    state.latestDeliveryKey = null;
+    empty(list, 'Checking for deliveries…');
+  }
+  state.deliveryLoading = true;
+  refresh.disabled = true;
+  list.setAttribute('aria-busy', 'true');
+  try {
+    const query = allAgents ? '' : '?' + new URLSearchParams({ agent: state.agent });
+    const data = await api('/api/deliveries' + query);
+    if (call !== state.deliveryRequest) return;
+    const records = allAgents ? data.latestByAgent : data.records;
+    const key = JSON.stringify(records);
+    if (key !== state.latestDeliveryKey) {
+      renderDeliveries(records);
+      state.latestDeliveryKey = key;
+    }
+  } catch {
+    if (call !== state.deliveryRequest) return;
+    state.latestDeliveryKey = null;
+    empty(list, 'Could not check for deliveries. Refresh to try again.');
+  } finally {
+    if (call === state.deliveryRequest) {
+      state.deliveryLoading = false;
+      list.setAttribute('aria-busy', 'false');
+      refresh.disabled = false;
+      if (!document.hidden) state.deliveryTimer = setTimeout(refreshDeliveries, DELIVERY_REFRESH_MS);
+    }
+  }
 }
 
 function renderCatalog() {
@@ -240,6 +428,9 @@ async function loadCatalog(reschedule = true) {
       state.catalogLoading = false;
       renderCatalog();
       if (state.plan && !state.saving && !usablePlan()) renderPlan();
+      if (state.workspace && state.workspace.revision !== state.revision && !state.workspaceLoading) {
+        void loadWorkspace(state.workspace.workspace.directory);
+      }
     }
   }
 }
@@ -265,8 +456,12 @@ async function runTask(reschedule = true) {
     if (call === state.taskRequest) {
       state.taskLoading = false;
       renderPlan();
+      renderWorkspace();
       if (state.catalog && state.catalog.revision !== state.revision && !state.catalogLoading) {
         void loadCatalog();
+      }
+      if (state.workspace && state.workspace.revision !== state.revision && !state.workspaceLoading) {
+        void loadWorkspace(state.workspace.workspace.directory);
       }
     }
   }
@@ -278,6 +473,7 @@ async function savePreference(skill, status, list) {
   state.saving = true;
   renderPlan();
   renderCatalog();
+  renderWorkspace();
   const scopeLabel = editScopeLabel();
   const agent = state.scope === 'project' ? undefined : state.agent;
   let errorMessage;
@@ -288,31 +484,41 @@ async function savePreference(skill, status, list) {
     errorMessage = error.status === 409 ? 'Another dashboard changed these preferences. Review the refreshed settings and try again.' : error.message;
   }
   try {
-    await Promise.all([loadCatalog(), runTask()]);
+    await Promise.all([loadCatalog(), runTask(), loadWorkspace(state.workspace?.workspace.directory ?? '.')]);
   } finally {
     state.saving = false;
     renderPlan();
     renderCatalog();
+    renderWorkspace();
     if (errorMessage) showError(errorMessage);
     else announce(skill.name + ' preference saved for ' + scopeLabel + '.');
     const restoredSwitch = [...list.querySelectorAll('.switch')].find(control => control.dataset.path === skill.path);
     if (restoredSwitch && !restoredSwitch.disabled) restoredSwitch.focus({ preventScroll: true });
     else if (list === el('selected-list')) el('run').focus({ preventScroll: true });
+    else if (list === el('suggested-list')) el('inspect-folder').focus({ preventScroll: true });
     else el('catalog-filter').focus({ preventScroll: true });
   }
 }
 
+el('folder-form').addEventListener('submit', event => {
+  event.preventDefault();
+  showError();
+  void loadWorkspace(el('folder-path').value.trim() || '.', true);
+});
+el('folder-path').addEventListener('input', () => {
+  updateFolderNote();
+  updateSelectionNote();
+  updateButtons();
+});
+
 el('task-form').addEventListener('submit', event => {
   event.preventDefault();
   const query = el('task-query').value.trim();
-  if (!query) {
-    showError('Describe the task you want to work on.');
-    el('task-query').focus();
-    return;
-  }
+  if (!query || !folderFieldIsCurrent() || state.workspaceLoading) return;
   showError();
   state.task = {
     query,
+    directory: state.workspace.workspace.directory,
     tokenBudget: el('token-budget').valueAsNumber,
     maxSkills: el('max-skills').valueAsNumber,
   };
@@ -322,6 +528,9 @@ el('task-form').addEventListener('input', () => {
   updateSelectionNote();
   updateButtons();
 });
+el('task-form').addEventListener('invalid', () => {
+  el('advanced').open = true;
+}, true);
 
 el('download').addEventListener('click', () => {
   if (!usablePlan() || !state.plan.markdown || !formMatchesTask()) return;
@@ -337,17 +546,30 @@ el('download').addEventListener('click', () => {
 
 el('agent').addEventListener('change', () => {
   showError();
+  const directory = state.workspace?.workspace.directory ?? '.';
   state.agent = el('agent').value;
   state.filters.page = 1;
   state.catalog = null;
   renderCatalog();
-  void Promise.all([loadCatalog(), runTask()]);
+  void Promise.all([loadCatalog(), runTask(), loadWorkspace(directory)]);
+  if (state.deliveryView === 'selected') void refreshDeliveries(true);
 });
 
 el('scope').addEventListener('change', () => {
   state.scope = el('scope').value;
   renderPlan();
   renderCatalog();
+  renderWorkspace();
+});
+
+el('delivery-view').addEventListener('change', () => {
+  state.deliveryView = el('delivery-view').value;
+  void refreshDeliveries(true);
+});
+el('refresh-delivery').addEventListener('click', () => void refreshDeliveries());
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) clearTimeout(state.deliveryTimer);
+  else void refreshDeliveries();
 });
 
 function applyFilters() {
@@ -377,7 +599,9 @@ for (const [id, change] of [['previous', -1], ['next', 1]]) {
 async function start() {
   try {
     const project = await api('/api/project');
+    state.projectName = project.name;
     el('project-name').textContent = project.name;
+    el('workspace-name').textContent = project.name;
     el('agent').replaceChildren(...project.agents.map(id => {
       const option = node('option', '', agentLabels[id] ?? id);
       option.value = id;
@@ -392,7 +616,7 @@ async function start() {
     el('token-budget').defaultValue = project.limits.defaultTokenBudget;
     state.ready = true;
     updateButtons();
-    await loadCatalog();
+    await Promise.all([loadCatalog(), loadWorkspace('.', true), refreshDeliveries(true)]);
   } catch (error) {
     showError(error.message);
     el('project-name').textContent = 'Project unavailable';

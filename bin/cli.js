@@ -7,7 +7,7 @@ import {
   SELECTION_AGENTS, exportSkillContext, resolveSkillProject, selectSkills, setSkillSelectionState,
 } from '../src/skill-selection.js';
 
-const VERSION = '2.2.0';
+const VERSION = '2.3.0';
 
 async function loadInstaller() {
   const { OmniInstaller } = await import('../src/installer.js');
@@ -136,6 +136,7 @@ program
   .description('Preview relevant skills for a task or export a bounded Markdown context pack')
   .argument('<query>', 'Task description')
   .option('--project <dir>', 'Project directory')
+  .option('--directory <dir>', 'Relative workspace folder for technology signals')
   .option('--agent <id>', 'Apply an agent’s project preferences', agentOption)
   .option('--token-budget <n>', 'Estimated input token budget', integerOption)
   .option('--max-skills <n>', 'Maximum selected skills', integerOption)
@@ -148,13 +149,19 @@ program
     const { markdown, ...summary } = selection;
     if (options.json) {
       console.log(JSON.stringify(summary, null, 2));
-    } else if (!summary.matches.length) {
-      console.log('No catalog skills matched within the requested limits.');
     } else {
-      for (const match of summary.matches) {
-        console.log(`${match.path} (~${match.estimatedTokens} tokens)\n  ${match.reason}`);
+      for (const technology of summary.workspace.technologies) {
+        const filenames = technology.sources.map(({ directory, file }) =>
+          directory === '.' ? file : `${directory}/${file}`).join(', ');
+        console.log(`${technology.name} detected in ${filenames} for workspace ${summary.workspace.directory}.`);
       }
-      console.log(`Estimated context size: ${summary.estimatedTokens} of ${summary.tokenBudget} input tokens.`);
+      if (!summary.matches.length) console.log('No catalog skills matched within the requested limits.');
+      else {
+        for (const match of summary.matches) {
+          console.log(`${match.path} (~${match.estimatedTokens} tokens)\n  ${match.reason}`);
+        }
+        console.log(`This pack uses an estimated ${summary.estimatedTokens} of ${summary.tokenBudget} input tokens.`);
+      }
       if (summary.output) console.log(`Wrote ${summary.output}`);
     }
   });

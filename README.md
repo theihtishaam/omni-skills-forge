@@ -1,6 +1,6 @@
 # Omni Skills Forge
 
-Pick skills for the task in front of you. Omni searches **50,009 local Markdown skill files** and gives a connected agent a small selection within a budget you set. You can turn a skill off for one agent or for everyone working in a project.
+Your agent can pick up the skills it needs from the folder where you are working. Omni matches a request against **50,009 local Markdown files**, picks up to three by default, and shows what each connected agent received. Give each project its own rules.
 
 [![Star Omni Skills Forge on GitHub](https://img.shields.io/github/stars/theihtishaam/omni-skills-forge?label=Star%20on%20GitHub&style=for-the-badge&logo=github)](https://github.com/theihtishaam/omni-skills-forge)
 [![Follow @theihtishaam on GitHub](https://img.shields.io/github/followers/theihtishaam?label=Follow%20%40theihtishaam&style=for-the-badge&logo=github)](https://github.com/theihtishaam)
@@ -17,32 +17,55 @@ Pick skills for the task in front of you. Omni searches **50,009 local Markdown 
 
 ## Quick start
 
-Use Node.js 18 or later. From your project directory:
+In your project folder, run these commands with Node.js 18 or later.
 
 ```sh
 npm install -g omni-skills-forge@latest
-osf dashboard --serve --project .
+osf dashboard --serve
 ```
 
-Choose an agent, paste a task such as “Review React accessibility for keyboard navigation and focus in a form,” and build a preview. The dashboard shows the matching skills, why they qualified, and the estimated size of the text. Under **Skill catalog**, change eligibility for this agent or for the whole project. A project-wide exclusion applies to every agent.
+The dashboard opens in your browser. It also prints a local address you can reopen while the command runs.
 
-![The local dashboard picking skills for a React accessibility task, with an agent selector, relevance reasons and a context budget](https://raw.githubusercontent.com/theihtishaam/omni-skills-forge/v2.2.0/assets/dashboard-task-context.png)
+### 1. Inspect the folder where the work happens
 
-To try the same selection from a terminal, run:
+Choose an **Agent** on the left. The dashboard starts at your project root. In a repository with several apps, enter a relative folder such as `apps/storefront` and click **Inspect folder**. Under **Detected technologies**, you can see the filename behind each match. **Suggested skills** are on standby. Inspecting a folder sends no skill text to an agent.
 
-```sh
-osf select "Review React accessibility for keyboard navigation and focus in a form" --agent codex --project . --max-skills 2 --token-budget 1400
-```
+![Workspace dashboard showing the storefront folder, detected technology files, standby suggestions and agent deliveries](https://raw.githubusercontent.com/theihtishaam/omni-skills-forge/v2.3.0/assets/dashboard-workspace.png)
 
-With the default preferences in the 2.2.0 catalog, that example selects two files covering React accessibility and form handling. Their combined pack uses **823 estimated tokens** of the 1,400-token budget. The rest of the catalog contributes no skill text to the pack.
+### 2. Try a task in your own words
+
+Open **Preview a task**, enter “Review keyboard accessibility in this form,” and click **Preview task skills**. **Selected for this task** lists the files and the reason each matched. Download the Markdown to read exactly what your agent would receive. A preview stays in the dashboard.
+
+![Task preview showing a keyboard-accessibility request and the selected skill with its match reason](https://raw.githubusercontent.com/theihtishaam/omni-skills-forge/v2.3.0/assets/dashboard-task-context.png)
+
+In a controlled example, we submitted that exact sentence to the Codex prompt hook from two different folders. The empty folder produced no guidance. The React storefront selected accessibility and form-handling guidance. Asking about the weather in that same storefront returned zero skill text.
+
+![Measured comparison. The same form review selected zero skills in an empty folder and two in a React storefront. A weather question in the storefront selected zero.](https://raw.githubusercontent.com/theihtishaam/omni-skills-forge/v2.3.0/assets/workspace-comparison.png)
+
+Reproduce the comparison from the repository with `node scripts/measure-workspace.mjs`. The output includes each chosen catalog path and the byte count returned by the hook. [Measurement script](https://github.com/theihtishaam/omni-skills-forge/blob/v2.3.0/scripts/measure-workspace.mjs) · [Recorded output](https://github.com/theihtishaam/omni-skills-forge/blob/v2.3.0/docs/workspace-comparison.json)
+
+### 3. Set the rules for each agent
+
+Under **Skill catalog**, choose **This agent** or **All agents** before changing a switch. For example, disable a form-handling skill for Claude Code and leave it available to Codex. A project-wide exclusion applies to everyone in that project. Other workspaces keep their own preferences.
+
+| What the dashboard shows | What happens on the next request |
+| --- | --- |
+| Eligible or enabled | The skill can be selected when it fits the task. The default limit is three. |
+| Standby | The folder suggests this skill. Its text stays out of the prompt until selected. |
+| Disabled | Omni skips that file for the selected agent or the whole project. |
+| Delivered context | Omni returned the listed files to an agent through its hook or MCP connection. |
+
+![Catalog switches showing how to change a skill preference for a single agent in a project](https://raw.githubusercontent.com/theihtishaam/omni-skills-forge/v2.3.0/assets/dashboard-agent-preferences.png)
 
 ### Automatic selection
 
-Codex and Claude Code can call Omni on each submitted prompt through a project hook. A matching prompt receives a skill pack. An unrelated prompt receives no skill text. Other compatible agents can request a pack using the read-only MCP tool `select_skills`. The host decides when to call it. Pick one method per host to avoid receiving the same guidance twice. [Host setup and examples](https://github.com/theihtishaam/omni-skills-forge/blob/v2.2.0/docs/TASK_SKILLS.md)
+**Codex and Claude Code** can run Omni when you submit a prompt. Set up the project hook once and the host supplies its working folder for each request. **Other hosts with local MCP support** can call `select_skills` with the task and an optional project-relative directory. Choose one route per agent. [Copy the setup for your host](https://github.com/theihtishaam/omni-skills-forge/blob/v2.3.0/docs/TASK_SKILLS.md)
 
-By default a pack has room for up to **3 skills** and **2,400 estimated tokens**. Eligible skills stay on standby until they match. Settings apply to packs produced by Omni. A skill previously installed as an always-on rule in another application follows that application's rules. The budget covers the selected text. A host can also spend tokens on its own instructions and tool descriptions.
+After submitting a matching task, open **Delivered context**. Choose **All agents** to see the latest handoff to each agent, or inspect an individual agent for its recent deliveries. Each entry shows the time, folder, method and exact files Omni returned. Your host controls what the model does with that guidance. You can also preview a request from the command line.
 
-![Agent-specific skill preferences in the running local dashboard](https://raw.githubusercontent.com/theihtishaam/omni-skills-forge/v2.2.0/assets/dashboard-agent-preferences.png)
+```sh
+osf select "Review keyboard accessibility in this form" --agent codex --project . --directory apps/storefront
+```
 
 ### Copy a skill by hand
 
@@ -106,7 +129,7 @@ Use an explicit `--tool` and `--dir` to control where files go. `--all` selects 
 | `osf select "task" --agent codex --project .` | Preview the selected context. Add `--output ./task-skills.md` to save a new Markdown file. |
 | `osf disable <catalog-path> --agent claude-code --project .` | Exclude this file from Claude Code's selections in this project. Omit `--agent` to exclude it across agents. |
 | `osf enable <catalog-path> --agent claude-code --project .` | Allow this file to compete when it matches, subject to the project's policy. |
-| `osf mcp --project . --agent codex` | Serve a single read-only task selection tool over standard input/output. |
+| `osf mcp --project . --agent codex` | Serve the task selection tool over standard input/output and keep a local receipt for delivered skills. |
 | `osf` | Opens the interactive menu. |
 | `osf search <query> --limit 25` | Matches names, descriptions, or tags across the full registry. |
 | `osf info <name>` | Shows the selected registry entry, including the file path. |

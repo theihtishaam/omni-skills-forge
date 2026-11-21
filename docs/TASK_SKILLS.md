@@ -1,6 +1,8 @@
 # Give an agent the skills for its current task
 
-Open `osf dashboard --serve --project .` in the folder where you work. Choose an agent, describe a task and preview the pack. The same selection powers the CLI, the prompt hook and the MCP tool. They all read the preferences for the project supplied at launch.
+Open `osf dashboard --serve --project .` in the folder where you work. Choose an agent. For a repository with multiple apps, enter a relative folder and choose **Inspect folder**. The dashboard shows which technology it found, the manifest behind that match and a few skills on standby. Enter a task to preview a selection. The CLI, prompt hook and MCP tool use the same selector and project preferences.
+
+Workspace detection checks known project files in the chosen directory and walks up to the project boundary for the nearest recognizable stack. For example, a React dependency in `apps/storefront/package.json` can resolve an ambiguous form-review task inside `apps/storefront/src`. An explicit technology in the request takes priority. In a project without a recognized manifest, name the technology in the task. The detector uses filenames and known manifest keys and runs no project scripts.
 
 ## Choose who can use a skill
 
@@ -10,7 +12,7 @@ The CLI takes the exact catalog path shown on a skill. For example:
 
 ```sh
 osf disable web-dev/react/react-accessibility-a11y-best-practices-intermediate.md --project . --agent claude-code
-osf select "React accessibility best practices" --project . --agent codex --max-skills 1 --token-budget 1400
+osf select "Review keyboard accessibility in this form" --project . --directory apps/storefront --agent codex
 ```
 
 The default pack limit is three skills and 2,400 estimated tokens. The estimate uses the complete rendered Markdown, including paths, headings and match reasons. The same request with the same preferences and installed catalog produces the same selection. The picker can return fewer skills or none. An empty result contributes zero skill text.
@@ -29,7 +31,7 @@ Install the CLI with `npm install -g omni-skills-forge` and make sure `osf --ver
         "hooks": [
           {
             "type": "command",
-            "command": "osf hook --agent claude-code --project /work/checkout --max-skills 2 --token-budget 1400"
+            "command": "osf hook --agent claude-code --project /work/checkout"
           }
         ]
       }
@@ -42,7 +44,7 @@ The hook uses the visible prompt and working directory supplied by the host. It 
 
 ## Let a compatible agent ask for a pack over MCP
 
-For on-demand selection, configure `osf mcp --agent <agent> --project <absolute-project-path>` as a local stdio server. The agent calls the read-only `select_skills` tool with a task. This route works with a host that supports local MCP tools and lets the host choose when it needs guidance. Use a single delivery route in each host to avoid including the same skills twice.
+For on-demand selection, configure `osf mcp --agent <agent> --project <absolute-project-path>` as a local stdio server. The agent calls `select_skills` with a task and can supply a relative `directory` inside that project. Use one delivery route per host so the same skills reach its prompt once.
 
 Here is a Codex entry for `.codex/config.toml`. Using the absolute Node executable and installed CLI file also works on Windows installations where the MCP launcher can't execute an npm command shim. Run `npm root -g` to locate the global package directory, then append `omni-skills-forge/bin/cli.js`. Replace each example path with its local equivalent.
 
@@ -66,7 +68,11 @@ For Claude Code, merge an entry into the project's `.mcp.json` instead:
 }
 ```
 
-Restart or reconnect the host as needed. Ask it to use `select_skills` for the current task. The tool receives task text and limits. The server fixes the project and agent at startup. [Codex MCP configuration](https://developers.openai.com/codex/mcp) · [Claude Code MCP configuration](https://code.claude.com/docs/en/mcp)
+Restart or reconnect the host as needed. Ask it to use `select_skills` for the current task. For example, it can submit `{"query":"Review keyboard accessibility in this form","directory":"apps/storefront"}`. The server fixes the project and agent at startup. [Codex MCP configuration](https://developers.openai.com/codex/mcp) · [Claude Code MCP configuration](https://code.claude.com/docs/en/mcp)
+
+## Check what reached an agent
+
+Choose the agent in the dashboard and open **Delivered context**. Omni refreshes this list while the page is open. You can also click **Refresh**. Each receipt records the delivery time, agent, route, relative folder and catalog paths. Omni keeps the latest 64 receipts for the project under `.omni-skills-forge/deliveries/`. The task text and skill bodies stay out of the receipts. Catalog browsing, task preview and unrelated prompts leave the list unchanged. The list measures guidance returned by Omni. Your host controls model execution and billing.
 
 ## When Exactwork helps
 

@@ -15,6 +15,22 @@ async function readEvent(input) {
   return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(Buffer.concat(chunks)));
 }
 
+function writeHookContext(output, additionalContext) {
+  const line = JSON.stringify({ hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext } }) + '\n';
+  return new Promise((resolve, reject) => {
+    output.once('error', reject);
+    output.write(line, error => {
+      if (error) {
+        // Node emits the stream error after reporting it to the write callback.
+        reject(error);
+        return;
+      }
+      output.off('error', reject);
+      resolve();
+    });
+  });
+}
+
 /** A prompt hook is optional guidance. A missing directory or bad event must leave the prompt usable. */
 export async function runPromptHook({ project = process.cwd(), agent, tokenBudget, maxSkills },
   { input = process.stdin, output = process.stdout } = {}) {
@@ -28,11 +44,13 @@ export async function runPromptHook({ project = process.cwd(), agent, tokenBudge
     if (relative === '..' || relative.startsWith('..' + path.sep) || path.isAbsolute(relative)) return;
 
     const { selectSkills } = await import('./skill-selection.js');
-    const selection = await selectSkills({ project: root, agent, query: event.prompt.slice(0, 4000), tokenBudget, maxSkills });
+    const directory = relative.split(path.sep).join('/') || '.';
+    const selection = await selectSkills({ project: root, agent, directory, query: event.prompt.slice(0, 4000), tokenBudget, maxSkills });
     if (!selection.matches.length || !selection.markdown) return;
-    output.write(JSON.stringify({ hookSpecificOutput: {
-      hookEventName: 'UserPromptSubmit', additionalContext: selection.markdown
-    } }) + '\n');
+    await writeHookContext(output, selection.markdown);
+    const { recordSkillDelivery } = await import('./skill-delivery.js');
+    await recordSkillDelivery({ project: root, agent, method: 'hook', directory: selection.workspace.directory,
+      paths: selection.matches.map(item => item.path) });
   } catch {
     // Fail open without logging the user's prompt, event payload or native transcript location.
   }

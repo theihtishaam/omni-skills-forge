@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { request } from 'node:http';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { Readable, Writable } from 'node:stream';
 import { test } from 'node:test';
 import { startManagementDashboard } from '../src/management-dashboard.js';
+import { runPromptHook } from '../src/skill-prompt-hook.js';
 
 async function dashboardFixture(t) {
   const testRoot = path.resolve(tmpdir());
@@ -14,7 +16,7 @@ async function dashboardFixture(t) {
   t.after(() => rm(projectRoot, { recursive: true, force: true }));
   const dashboard = await startManagementDashboard({ projectRoot });
   t.after(() => dashboard.close());
-  return dashboard;
+  return { ...dashboard, projectRoot };
 }
 
 async function post(base, route, data, headers = {}) {
@@ -103,4 +105,66 @@ test('dashboard paginates metadata and applies revision-checked project and agen
   assert.equal((await post(url, '/api/preferences', { ...globalMutation, status: 'default', expectedRevision: 2 })).status, 200);
   assert.equal((await post(url, '/api/preferences', { ...mutation, status: 'enabled', expectedRevision: 3 })).status, 200);
   assert.ok((await select('codex')).matches.some(candidate => candidate.path === skillPath));
+});
+
+test('dashboard distinguishes folder suggestions and task previews from deliveries', async t => {
+  const { url, projectRoot } = await dashboardFixture(t);
+  const directory = 'apps/storefront';
+  const storefront = path.join(projectRoot, directory);
+  await mkdir(storefront, { recursive: true });
+  await writeFile(path.join(storefront, 'package.json'), JSON.stringify({
+    dependencies: { react: '^19.0.0' },
+    devDependencies: { typescript: '^5.0.0' },
+    description: 'synthetic manifest content outside the profile',
+  }));
+  await writeFile(path.join(projectRoot, 'go.mod'), 'module example.test/workspace\n');
+
+  const workspace = async (focus, agent = 'codex') => post(url, '/api/workspace', { directory: focus, agent });
+  const response = await workspace(directory);
+  assert.equal(response.status, 200);
+  const result = await response.json();
+  assert.equal(result.workspace.directory, directory);
+  assert.deepEqual(result.workspace.technologies, [
+    { name: 'React', sources: [{ directory, file: 'package.json' }] },
+    { name: 'TypeScript', sources: [{ directory, file: 'package.json' }] },
+  ]);
+  assert.ok(result.suggestions.length > 0 && result.suggestions.length <= 3);
+  assert.equal(result.markdown, undefined);
+  assert.ok(result.suggestions.every(skill => typeof skill.reason === 'string' && skill.eligibility !== 'disabled'));
+  assert.ok(!JSON.stringify(result).includes('synthetic manifest content'));
+  assert.equal((await workspace('../outside')).status, 400);
+  const root = await (await workspace('.')).json();
+  assert.deepEqual(root.workspace.technologies.map(item => item.name), ['Go']);
+
+  const query = 'Improve React accessibility with keyboard navigation';
+  const selected = await post(url, '/api/select', { query, directory, agent: 'codex' });
+  assert.equal(selected.status, 200);
+  const plan = await selected.json();
+  assert.equal(plan.workspace.directory, directory);
+  assert.ok(plan.matches.length > 0);
+  const deliveries = async agent => {
+    const response = await fetch(url + '/api/deliveries?' + new URLSearchParams({ agent }));
+    assert.equal(response.status, 200);
+    return (await response.json()).records;
+  };
+  assert.deepEqual(await deliveries('codex'), []);
+
+  let outputBytes = '';
+  const output = new Writable({ write(chunk, _, callback) { outputBytes += chunk.toString(); callback(); } });
+  await runPromptHook({ project: projectRoot, agent: 'codex' }, {
+    input: Readable.from([JSON.stringify({ hook_event_name: 'UserPromptSubmit', prompt: query, cwd: storefront })]),
+    output,
+  });
+  assert.match(outputBytes, /additionalContext/u);
+  const [delivery, ...earlier] = await deliveries('codex');
+  assert.equal(earlier.length, 0);
+  assert.equal(delivery.agent, 'codex');
+  assert.equal(delivery.directory, directory);
+  assert.equal(delivery.method, 'hook');
+  assert.ok(Number.isFinite(Date.parse(delivery.at)));
+  assert.deepEqual(delivery.skills, plan.matches.map(({ path, name }) => ({ path, name })));
+  assert.equal(delivery.markdown, undefined);
+  assert.deepEqual(await deliveries('cursor'), []);
+  const overview = await (await fetch(url + '/api/deliveries')).json();
+  assert.deepEqual(overview.latestByAgent, [delivery]);
 });

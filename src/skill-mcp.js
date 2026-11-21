@@ -1,9 +1,10 @@
 import { createRequire } from 'node:module';
-import { pipeline } from 'node:stream/promises';
+import { recordSkillDelivery } from './skill-delivery.js';
 import {
   DEFAULT_SELECTION_MAX_SKILLS, DEFAULT_SELECTION_TOKEN_BUDGET, MAX_SELECTION_QUERY_LENGTH,
   MAX_SELECTION_SKILLS, MAX_SELECTION_TOKEN_BUDGET, SELECTION_AGENTS, resolveSkillProject, selectSkills,
 } from './skill-selection.js';
+import { MAX_WORKSPACE_DIRECTORY_LENGTH } from './workspace-profile.js';
 
 const { name, version } = createRequire(import.meta.url)('../package.json');
 const PROTOCOL_VERSIONS = ['2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05'];
@@ -12,11 +13,15 @@ const utf8 = new TextDecoder('utf-8', { fatal: true });
 const INSTRUCTIONS = 'Call select_skills once when starting a new technical task that could use specialist guidance. If an Omni prompt hook already checked the current task, use its result and skip the tool call. An empty result means you can continue without Omni guidance.';
 const SELECT_TOOL = {
   name: 'select_skills',
-  description: 'Find the enabled Omni skills relevant to the current technical task and return their guidance within a size budget. The server uses this project and agent’s existing settings. Call at the start of a relevant task unless an Omni prompt hook has already checked it.',
+  description: 'Find the enabled Omni skills relevant to the current technical task and return their guidance within a size budget. The server uses this project and agent’s existing settings and records nonempty deliveries locally. Call at the start of a relevant task unless an Omni prompt hook has already checked it.',
   inputSchema: {
     type: 'object',
     properties: {
       query: { type: 'string', minLength: 1, maxLength: MAX_SELECTION_QUERY_LENGTH, description: 'Describe the task and its technologies.' },
+      directory: {
+        type: 'string', minLength: 1, maxLength: MAX_WORKSPACE_DIRECTORY_LENGTH,
+        description: 'An existing subdirectory relative to the configured project, such as apps/web. Defaults to the project root.',
+      },
       tokenBudget: {
         type: 'integer', minimum: 1, maximum: MAX_SELECTION_TOKEN_BUDGET,
         default: DEFAULT_SELECTION_TOKEN_BUDGET, description: 'Estimated token limit for the returned guidance.',
@@ -29,19 +34,19 @@ const SELECT_TOOL = {
     required: ['query'],
     additionalProperties: false,
   },
-  annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
 };
 
 function isObject(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
-function rpcResult(id, result) {
-  return { jsonrpc: '2.0', id, result };
+function rpcResult(id, result, delivery) {
+  return { message: { jsonrpc: '2.0', id, result }, delivery };
 }
 
 function rpcError(id, code, message) {
-  return { jsonrpc: '2.0', id, error: { code, message } };
+  return { message: { jsonrpc: '2.0', id, error: { code, message } } };
 }
 
 function validArguments(args) {
@@ -49,7 +54,9 @@ function validArguments(args) {
   return Object.entries(args).every(([key, value]) => {
     if (!Object.hasOwn(SELECT_TOOL.inputSchema.properties, key)) return false;
     const schema = SELECT_TOOL.inputSchema.properties[key];
-    if (key === 'query') return value.length <= schema.maxLength;
+    if (schema.type === 'string') {
+      return typeof value === 'string' && value.trim().length >= schema.minLength && value.length <= schema.maxLength;
+    }
     return Number.isInteger(value) && value >= schema.minimum && value <= schema.maximum;
   });
 }
@@ -80,7 +87,7 @@ async function* readResponses(input, handle) {
       if (length + segment.length > MAX_FRAME_BYTES) {
         length = 0;
         discarding = newline === -1;
-        yield `${JSON.stringify(rpcError(null, -32600, 'MCP message exceeds 64 KiB.'))}\n`;
+        yield rpcError(null, -32600, 'MCP message exceeds 64 KiB.');
         continue;
       }
       segment.copy(partial, length);
@@ -88,9 +95,25 @@ async function* readResponses(input, handle) {
       if (newline === -1) continue;
       const response = await handle(partial.subarray(0, length));
       length = 0;
-      if (response) yield `${JSON.stringify(response)}\n`;
+      if (response) yield response;
     }
   }
+}
+
+function writeResponse(output, message) {
+  const line = `${JSON.stringify(message)}\n`;
+  return new Promise((resolve, reject) => {
+    output.once('error', reject);
+    output.write(line, error => {
+      if (error) {
+        // The stream emits the error after invoking its write callback.
+        reject(error);
+        return;
+      }
+      output.off('error', reject);
+      resolve();
+    });
+  });
 }
 
 export async function runSkillMcp({ project, agent, input = process.stdin, output = process.stdout }) {
@@ -143,11 +166,17 @@ export async function runSkillMcp({ project, agent, input = process.stdin, outpu
         if (state !== 'ready') return rpcError(id, -32002, 'The server is not initialized.');
         if (params?.name !== SELECT_TOOL.name) return rpcError(id, -32602, 'Unknown tool.');
         const args = params.arguments;
-        if (!validArguments(args)) return rpcError(id, -32602, 'Provide a task query and valid selection limits.');
+        if (!validArguments(args)) return rpcError(id, -32602, 'Provide a task query and valid selection options.');
         try {
-          const { markdown } = await selectSkills({ project: root, agent, ...args });
-          return rpcResult(id, { content: markdown ? [{ type: 'text', text: markdown }] : [] });
-        } catch {
+          const { markdown, matches, workspace } = await selectSkills({ ...args, project: root, agent });
+          if (!markdown || !matches.length) return rpcResult(id, { content: [] });
+          return rpcResult(id, { content: [{ type: 'text', text: markdown }] }, {
+            project: root, agent, method: 'mcp', directory: workspace.directory, paths: matches.map(match => match.path),
+          });
+        } catch (error) {
+          if (error.code === 'INVALID_SELECTION_INPUT') {
+            return rpcError(id, -32602, 'The workspace directory must be an existing, project-relative directory.');
+          }
           return rpcResult(id, {
             isError: true,
             content: [{ type: 'text', text: 'Omni could not select skills. Check the project’s Omni configuration and try again.' }],
@@ -159,5 +188,9 @@ export async function runSkillMcp({ project, agent, input = process.stdin, outpu
     }
   }
 
-  await pipeline(readResponses(input, handle), output);
+  for await (const { message, delivery } of readResponses(input, handle)) {
+    await writeResponse(output, message);
+    if (delivery) await recordSkillDelivery(delivery).catch(() => {});
+  }
+  output.end();
 }

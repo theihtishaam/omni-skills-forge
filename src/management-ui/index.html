@@ -18,7 +18,7 @@
     <span class="top-label">Project dashboard</span>
     <nav class="source-links" aria-label="Project links">
       <a href="https://github.com/theihtishaam/omni-skills-forge" target="_blank" rel="noopener noreferrer">Repository <span aria-hidden="true">↗</span></a>
-      <a href="https://github.com/theihtishaam" target="_blank" rel="noopener noreferrer">Maintainer <span aria-hidden="true">↗</span></a>
+      <a href="https://github.com/theihtishaam" target="_blank" rel="noopener noreferrer">Ihtisham <span aria-hidden="true">↗</span></a>
     </nav>
   </header>
 
@@ -38,7 +38,9 @@
         </select>
       </div>
       <nav class="workspace-nav" aria-label="Workspace sections">
+        <a href="#folder">Workspace folder</a>
         <a href="#task">Task context</a>
+        <a href="#delivery">Delivered context</a>
         <a href="#catalog">Skill catalog</a>
         <a href="#catalog" id="disabled-link">Disabled skills <span id="disabled-count" class="nav-count">0</span></a>
       </nav>
@@ -49,29 +51,82 @@
     </aside>
 
     <main id="main">
-      <div id="task" class="page-heading">
-        <h1>Build task context</h1>
-        <p>Choose relevant skills and cap how much context you take into your next task.</p>
+      <div id="folder" class="page-heading">
+        <h1>Skills for <span id="workspace-name">your workspace</span></h1>
+        <p>Choose a folder to see which skills fit its stack.</p>
       </div>
-      <form id="task-form" class="task-form" aria-describedby="task-note">
-        <div class="task-input">
-          <label for="task-query">What are you working on?</label>
-          <textarea id="task-query" rows="3" maxlength="4000" required placeholder="e.g. Improve React accessibility with keyboard navigation"></textarea>
-          <p id="task-note" class="field-note">Your task and selected skill Markdown stay on this machine.</p>
+
+      <div class="folder-panel">
+        <form id="folder-form" class="folder-form">
+          <label for="folder-path">Workspace folder</label>
+          <div class="folder-field">
+            <input id="folder-path" value="." maxlength="512" spellcheck="false" autocomplete="off" aria-describedby="folder-note" required>
+            <button id="inspect-folder" class="primary" type="submit" disabled>Inspect folder <span aria-hidden="true">→</span></button>
+          </div>
+          <p id="folder-note" class="field-note">Use a path inside this workspace. A dot selects its root.</p>
+        </form>
+        <div class="stack">
+          <h2>Detected technologies</h2>
+          <div id="technology-list" class="tech-list" aria-live="polite"><p class="muted small">Checking the workspace…</p></div>
         </div>
-        <div class="task-limits">
-          <label for="token-budget">Token budget <input id="token-budget" type="number" min="1" max="16000" value="2400" required></label>
-          <label for="max-skills">Max skills <input id="max-skills" type="number" min="1" max="10" value="3" required></label>
-          <button id="run" class="primary" type="submit" disabled>Find relevant skills <span aria-hidden="true">→</span></button>
-        </div>
-      </form>
+      </div>
 
       <p id="notice" class="notice" role="alert" hidden></p>
       <div id="live-status" class="visually-hidden" role="status"></div>
 
-      <section id="selection" class="selection" aria-labelledby="selection-heading">
+      <div class="workspace-overview">
+        <section id="suggestions" aria-labelledby="suggestion-heading">
+          <div class="section-title">
+            <div><h2 id="suggestion-heading">Suggested skills</h2><p>Standby skills enter task context only when selected.</p></div>
+          </div>
+          <div class="result-pane">
+            <div class="table-labels" aria-hidden="true"><span>Skill and folder match</span><span>Preference</span></div>
+            <div id="suggested-list" class="skill-list"><div class="empty">Finding suggestions for this folder…</div></div>
+          </div>
+        </section>
+
+        <section id="delivery" aria-labelledby="delivery-heading">
+          <div class="section-title">
+            <div><h2 id="delivery-heading">Delivered context</h2><p id="delivery-note">Latest handoffs from the hook or MCP.</p></div>
+            <div class="delivery-controls">
+              <label for="delivery-view" class="visually-hidden">Delivery view</label>
+              <select id="delivery-view" disabled>
+                <option value="selected">Selected agent</option>
+                <option value="all">All agents</option>
+              </select>
+              <button id="refresh-delivery" class="secondary compact" type="button" disabled>Refresh</button>
+            </div>
+          </div>
+          <div id="delivery-list" class="result-pane delivery-pane"><div class="empty">Checking for deliveries…</div></div>
+        </section>
+      </div>
+
+      <section id="task" class="task" aria-labelledby="task-heading">
         <div class="section-title">
-          <div><h2 id="selection-heading">Selected skills</h2><p id="selection-note">Review the matches before taking them into your agent.</p></div>
+          <div><h2 id="task-heading">Preview a task</h2><p>Describe what you’re doing to see which skill text would fit.</p></div>
+        </div>
+        <form id="task-form" class="task-form" aria-describedby="task-note">
+          <div class="task-input">
+            <label for="task-query">What are you working on? <span class="muted">(optional)</span></label>
+            <textarea id="task-query" rows="2" maxlength="4000" placeholder="e.g. Improve React accessibility with keyboard navigation"></textarea>
+          </div>
+          <div class="task-actions">
+            <details id="advanced" class="advanced">
+              <summary>Advanced options</summary>
+              <div class="task-limits">
+                <label for="token-budget">Token budget <input id="token-budget" type="number" min="1" max="16000" value="2400" required></label>
+                <label for="max-skills">Max skills <input id="max-skills" type="number" min="1" max="10" value="3" required></label>
+              </div>
+            </details>
+            <button id="run" class="primary" type="submit" disabled>Preview task skills <span aria-hidden="true">→</span></button>
+          </div>
+          <p id="task-note" class="field-note">The preview stays on this machine. The hook and MCP deliver context separately.</p>
+        </form>
+      </section>
+
+      <section id="selection" class="selection" aria-labelledby="selection-heading" hidden>
+        <div class="section-title">
+          <div><h2 id="selection-heading">Selected for this task</h2><p id="selection-note">Preview skill text before downloading it.</p></div>
           <button id="download" class="secondary" type="button" disabled><span aria-hidden="true">↓</span> Download Markdown</button>
         </div>
         <div class="context-layout">

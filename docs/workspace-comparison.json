@@ -1,0 +1,38 @@
+{
+  "task": "Review keyboard accessibility in this form",
+  "agent": "codex",
+  "standbySuggestions": 3,
+  "cases": [
+    {
+      "label": "Empty workspace",
+      "directory": ".",
+      "prompt": "Review keyboard accessibility in this form",
+      "skills": [],
+      "technologies": [],
+      "deliveredBytes": 0
+    },
+    {
+      "label": "React storefront",
+      "directory": "storefront",
+      "prompt": "Review keyboard accessibility in this form",
+      "skills": [
+        "web-dev/react/react-accessibility-a11y-advanced-intermediate.md",
+        "web-dev/react/react-form-handling-advanced-intermediate.md"
+      ],
+      "technologies": [
+        "React"
+      ],
+      "deliveredBytes": 6038
+    },
+    {
+      "label": "Unrelated request",
+      "directory": "storefront",
+      "prompt": "What is the weather like today?",
+      "skills": [],
+      "technologies": [
+        "React"
+      ],
+      "deliveredBytes": 0
+    }
+  ]
+}

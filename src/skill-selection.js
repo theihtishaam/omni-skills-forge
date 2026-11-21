@@ -2,6 +2,9 @@ import { randomUUID } from 'node:crypto';
 import { link, lstat, mkdir, readFile, readdir, realpath, rename, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { detectWorkspaceProfile, resolveSkillProject } from './workspace-profile.js';
+
+export { detectWorkspaceProfile, resolveSkillProject } from './workspace-profile.js';
 
 export const SELECTION_AGENTS = Object.freeze([
   'codex', 'claude-code', 'cursor', 'cline', 'kilo', 'opencode', 'windsurf', 'portable',
@@ -22,12 +25,12 @@ const stopWords = new Set((
   'a about add after all also am an and are as at be been best build but by can code could create ' +
   'do does doing done existing fix for from get give good got had has have help how i if improve ' +
   'in into is it its let like make me more my need new of on one or our out please project put ' +
-  'said should show some than that the their them then there these they this those through to too ' +
+  'review said should show some than that the their them then there these they this those through to too ' +
   'try up update us use using want was way we were what when where which who will with would write you your'
 ).split(' '));
 const genericTopics = new Set([
   'advance', 'advanced', 'architecture', 'basics', 'beginner', 'deep', 'design', 'dive', 'entry',
-  'examples', 'expert', 'fundamental', 'fundamentals', 'guide', 'intro', 'intermediate',
+  'example', 'expert', 'fundamental', 'fundamentals', 'guide', 'intro', 'intermediate',
   'overview', 'pattern', 'patterns', 'practice', 'practices', 'skill', 'skills', 'tutorial',
 ]);
 const generatedSuffix = /-(?:advanced|architecture|best-practices|deep-dive|deployment|design|fundamentals|hardening|implementation|integration|migration|monitoring|optimization|patterns|performance|production|scalability|security|testing|troubleshooting)$/u;
@@ -37,6 +40,29 @@ const equivalentTerms = new Map([
   ['a11y', 'accessibility'], ['accessible', 'accessibility'],
   ['k8s', 'kubernetes'], ['node', 'nodejs'], ['postgres', 'postgresql'],
 ]);
+const workspaceThemes = new Map([
+  ['React', ['web-dev/react', 'react-accessibility-a11y', 'react-custom-hooks', 'react-form-handling']],
+  ['Next.js', ['web-dev/nextjs', 'nextjs-server-components', 'nextjs-data-fetching']],
+  ['Vue', ['web-dev/vue', 'vue-component-patterns', 'vue-form-validation']],
+  ['Svelte', ['web-dev/svelte', 'svelte-component-lifecycle', 'svelte-form-actions']],
+  ['Angular', ['web-dev/angular', 'angular-standalone-components', 'angular-form-handling']],
+  ['Astro', ['web-dev/astro', 'astro-components', 'astro-testing']],
+  ['Remix', ['web-dev/remix', 'remix-form-handling', 'remix-resource-routes']],
+  ['TypeScript', ['web-dev/react', 'react-typescript-patterns']],
+  ['Node.js', ['backend/nodejs', 'nodejs-testing-jest', 'nodejs-streams-pipeline']],
+  ['Python', ['backend/python', 'python-testing-pytest', 'python-data-validation', 'python-async-await']],
+  ['Go', ['backend/go', 'go-context-patterns', 'go-goroutines-channels']],
+  ['Rust', ['backend/rust', 'rust-ownership-patterns', 'rust-async-tokio']],
+  ['C#', ['backend/csharp', 'csharp-testing-xunit', 'csharp-linq-mastery']],
+  ['Docker', ['devops/docker', 'docker-multi-stage-builds']],
+  ['Kubernetes', ['devops/kubernetes', 'kubernetes-config-management', 'kubernetes-deployment-strategies']],
+  ['Terraform', ['devops/terraform', 'terraform-module-design', 'terraform-documentation-tf']],
+]);
+const weakWorkspaceTerms = new Set([
+  'api', 'application', 'component', 'content', 'data', 'input', 'interface', 'output',
+  'request', 'response', 'service', 'state', 'status', 'style', 'system', 'tool', 'version', 'work',
+]);
+const broadTechnologyTerms = new Set(['agent', 'computer', 'monitor', 'vision']);
 const levelOrder = ['intermediate', 'beginner', 'advanced', 'expert'];
 
 let catalog;
@@ -72,18 +98,6 @@ async function loadCatalog() {
 
 export async function loadSkillSelectionCatalog() {
   return (await loadCatalog()).registry;
-}
-
-export async function resolveSkillProject(project = process.cwd()) {
-  if (typeof project !== 'string' || !project.trim()) throw issue('Choose a project directory.');
-  let root;
-  try {
-    root = await realpath(path.resolve(project));
-    if ((await lstat(root)).isDirectory()) return root;
-  } catch (error) {
-    if (error.code !== 'ENOENT' && error.code !== 'ENOTDIR') throw error;
-  }
-  throw issue('The project path must be an existing directory.');
 }
 
 async function stateDirectory(project, create) {
@@ -233,7 +247,11 @@ function parseLimit(value, fallback, maximum, label) {
 }
 
 function words(value) {
-  const normalized = value.toLowerCase().normalize('NFKC').replace(/\bnode\.js\b/gu, 'nodejs');
+  const normalized = value.toLowerCase().normalize('NFKC')
+    .replace(/\b(node|next)\.js\b/gu, '$1js')
+    .replace(/\bvue\.js\b/gu, 'vue')
+    .replace(/\bc#(?![\p{L}\p{N}])/gu, 'csharp')
+    .replace(/\b(?:golang|go\.mod)\b/gu, 'go');
   return (normalized.match(/[\p{L}\p{N}]+/gu) ?? []).map(word => {
     if (equivalentTerms.has(word)) return equivalentTerms.get(word);
     if (word.length > 5 && word.endsWith('ies')) return word.slice(0, -3) + 'y';
@@ -241,6 +259,11 @@ function words(value) {
     if (word.length > 4 && word.endsWith('s') && !/[su]s$/u.test(word)) return word.slice(0, -1);
     return word;
   });
+}
+
+function explicitTechnologies(terms, query, known) {
+  const namesGo = /\b(?:golang|go\.mod|go\s+(?:channel|code|concurrenc|context|goroutine|module|package|program)|(?:in|using|with)\s+go\b)/iu.test(query);
+  return terms.filter(term => known.has(term) && !broadTechnologyTerms.has(term) && (term !== 'go' || namesGo));
 }
 
 function searchIndex(source) {
@@ -264,7 +287,7 @@ function searchIndex(source) {
   return source.searchIndex;
 }
 
-function scoreSkill(record, terms, technologies, agent, state) {
+function scoreSkill(record, terms, technologies, workspaceEvidence, agent, state) {
   const eligibility = getSkillEligibility(state, record.skill.file, agent);
   if (eligibility === 'disabled') return null;
   if (technologies.some(term => !record.title.has(term) && !record.tagged.has(term) &&
@@ -274,7 +297,8 @@ function scoreSkill(record, terms, technologies, agent, state) {
   let score = 0;
   let topicMatches = 0;
   let specificMatches = 0;
-  for (const term of terms) {
+  let specificWorkspaceTerm = false;
+  for (const [index, term] of terms.entries()) {
     const categoryMatch = record.category.has(term);
     const titleMatch = record.title.has(term);
     const tagMatch = record.tagged.has(term);
@@ -283,8 +307,9 @@ function scoreSkill(record, terms, technologies, agent, state) {
       if (!categoryMatch && (titleMatch || tagMatch) && !technologies.includes(term)) {
         if (!broadFacets.has(term)) specificMatches += 1;
         if (!broadFacets.has(term) || record.base.has(term)) topicMatches += 1;
+        if (!broadFacets.has(term) && !weakWorkspaceTerms.has(term)) specificWorkspaceTerm = true;
       }
-      score += titleMatch ? (categoryMatch ? 2 : 6) : (tagMatch ? 4 : 1);
+      score += titleMatch ? (categoryMatch ? 2 : 6 + 0.5 / (index + 1)) : (tagMatch ? 4 : 1);
     } else if (record.description.has(term)) {
       matched.push(term);
       score += 1;
@@ -293,12 +318,14 @@ function scoreSkill(record, terms, technologies, agent, state) {
   const integratedTopic = technologies.length > 1 && terms.length === technologies.length &&
     technologies.every(term => record.title.has(term) || record.tagged.has(term));
   const required = terms.length === 1 ? 1 : Math.max(2, technologies.length + Number(!integratedTopic));
-  if ((!topicMatches && !integratedTopic) || matched.length < required) return null;
+  const workspaceMatch = workspaceEvidence && specificWorkspaceTerm ? workspaceEvidence : null;
+  if ((!topicMatches && !integratedTopic) || (matched.length < required && !workspaceMatch)) return null;
   for (let index = 1; index < terms.length; index += 1) {
     if (record.titlePhrase.includes(` ${terms[index - 1]} ${terms[index]} `)) score += 4;
   }
   if (eligibility === 'enabled') score += 1;
-  return { ...record, score, matched, specificMatches };
+  if (workspaceMatch) score += 2;
+  return { ...record, score, matched, specificMatches, workspaceMatch };
 }
 
 function scoreOrder(first, second) {
@@ -318,7 +345,7 @@ async function readSkill(skillPath) {
   try {
     const resolved = await realpath(file);
     if (resolved !== file || !inside(root, resolved) || !(await lstat(file)).isFile()) return null;
-    return (await readFile(file, 'utf8')).trim();
+    return (await readFile(file, 'utf8')).replace(/\r\n/g, '\n').trim();
   } catch (error) {
     if (error.code === 'ENOENT' || error.code === 'ENOTDIR') return null;
     throw error;
@@ -329,36 +356,65 @@ function estimateTokens(markdown) {
   return Math.ceil(Buffer.byteLength(markdown, 'utf8') / 4);
 }
 
-export async function selectSkills({ project, agent, query, tokenBudget, maxSkills } = {}) {
+async function selectionScope(project, directory) {
+  const root = await resolveSkillProject(project);
+  const [state, workspace] = await Promise.all([
+    readState(await stateDirectory(root, false)),
+    detectWorkspaceProfile({ project: root, directory }),
+  ]);
+  return { state, workspace };
+}
+
+function evidenceLabel(evidence) {
+  return `${evidence.name} in ${evidence.sources.map(source => source.file).join(', ')}`;
+}
+
+function workspaceCue(record, workspace) {
+  return workspace.technologies.find(evidence => {
+    const [category, ...families] = workspaceThemes.get(evidence.name) ?? [];
+    if (evidence.name === 'TypeScript') {
+      return workspace.technologies.some(item => item.name === 'React') &&
+        families.some(family => record.family === `${category}/${family}`);
+    }
+    return record.skill.category === category;
+  });
+}
+
+export async function selectSkills({ project, directory, agent, query, tokenBudget, maxSkills } = {}) {
   validateAgent(agent);
   if (typeof query !== 'string' || query.length > MAX_SELECTION_QUERY_LENGTH) {
     throw issue(`The task must be text of up to ${MAX_SELECTION_QUERY_LENGTH} characters.`);
   }
   tokenBudget = parseLimit(tokenBudget, DEFAULT_SELECTION_TOKEN_BUDGET, MAX_SELECTION_TOKEN_BUDGET, 'Token budget');
   maxSkills = parseLimit(maxSkills, DEFAULT_SELECTION_MAX_SKILLS, MAX_SELECTION_SKILLS, 'Maximum skills');
-  const state = await loadSkillSelectionState({ project });
-  const result = { query, agent: agent ?? null, revision: state.revision, matches: [], estimatedTokens: 0, tokenBudget, maxSkills, markdown: '' };
+  const { state, workspace } = await selectionScope(project, directory);
+  const result = {
+    query, agent: agent ?? null, revision: state.revision, workspace,
+    matches: [], estimatedTokens: 0, tokenBudget, maxSkills, markdown: '',
+  };
   const terms = [...new Set(words(query).filter(word => !stopWords.has(word) && !genericTopics.has(word) && word.length > 1))];
   if (!terms.length) return result;
   let markdown = '# Omni Skills Forge task context\n\nSelected catalog skills. Token counts are estimates.\n';
   if (estimateTokens(markdown) >= tokenBudget) return result;
 
   const source = await loadCatalog();
-  const technologies = terms.filter(term => source.technologies.has(term));
+  const technologies = explicitTechnologies(terms, query, source.technologies);
   const ranked = searchIndex(source)
-    .map(record => scoreSkill(record, terms, technologies, agent, state))
+    .map(record => scoreSkill(record, terms, technologies,
+      technologies.length ? null : workspaceCue(record, workspace), agent, state))
     .filter(Boolean)
     .sort(scoreOrder);
   const hasSpecific = ranked.some(record => record.specificMatches);
   const families = new Set();
   let inspected = 0;
-  for (const { family, matched, skill, specificMatches } of ranked) {
+  for (const { family, matched, skill, specificMatches, workspaceMatch } of ranked) {
     if (families.has(family) || (hasSpecific && !specificMatches)) continue;
     if (++inspected > 8 * maxSkills) break;
     const content = await readSkill(skill.file);
     if (!content) continue;
-    const reason = `Task terms matched: ${matched.join(', ')}.`;
-    const chunk = `\n## ${skill.name}\n\nSource: \`${skill.file}\`\n\n${reason}\n\n${content}\n`;
+    const reason = `Matches the task terms ${matched.join(', ')}.` +
+      (workspaceMatch ? ` Workspace signals include ${evidenceLabel(workspaceMatch)}.` : '');
+    const chunk = `\n## ${skill.name}\n\nCatalog file \`${skill.file}\`\n\n${reason}\n\n${content}\n`;
     const next = markdown + chunk;
     if (estimateTokens(next) > tokenBudget) continue;
 
@@ -373,6 +429,49 @@ export async function selectSkills({ project, agent, query, tokenBudget, maxSkil
   if (result.matches.length) {
     result.markdown = markdown;
     result.estimatedTokens = estimateTokens(markdown);
+  }
+  return result;
+}
+
+export async function recommendWorkspaceSkills({ project, directory, agent, maxSkills } = {}) {
+  validateAgent(agent);
+  const limit = parseLimit(maxSkills, DEFAULT_SELECTION_MAX_SKILLS, MAX_SELECTION_SKILLS, 'Maximum skills');
+  const { state, workspace } = await selectionScope(project, directory);
+  const result = { revision: state.revision, agent: agent ?? null, workspace, suggestions: [] };
+  if (!workspace.technologies.length) return result;
+
+  const selections = new Map();
+  for (const evidence of workspace.technologies) {
+    if (evidence.name === 'TypeScript' && !workspace.technologies.some(item => item.name === 'React')) continue;
+    const [category, ...themes] = workspaceThemes.get(evidence.name) ?? [];
+    selections.set(evidence, themes.map(theme => `${category}/${theme}`));
+  }
+  if (!selections.size) return result;
+  const available = new Map();
+  const families = new Set([...selections.values()].flat());
+  for (const record of searchIndex(await loadCatalog())) {
+    if (!families.has(record.family)) continue;
+    const { skill } = record;
+    const status = getSkillEligibility(state, skill.file, agent);
+    if (status === 'disabled') continue;
+    const score = status === 'enabled' ? 1 : 0;
+    const candidate = { skill, score };
+    const previous = available.get(record.family);
+    if (!previous || scoreOrder(candidate, previous) < 0) available.set(record.family, candidate);
+  }
+
+  for (let index = 0; index < Math.max(...Array.from(selections.values(), themes => themes.length)); index += 1) {
+    for (const [evidence, themes] of selections) {
+      const candidate = available.get(themes[index]);
+      if (!candidate) continue;
+      const { skill } = candidate;
+      result.suggestions.push({
+        path: skill.file, name: skill.name, category: skill.category, difficulty: skill.difficulty,
+        description: skill.description, reason: `Suggested because Omni found ${evidenceLabel(evidence)}.`,
+      });
+      available.delete(themes[index]);
+      if (result.suggestions.length === limit) return result;
+    }
   }
   return result;
 }
