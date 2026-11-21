@@ -10,7 +10,6 @@ Find and install Markdown skills for your coding agent. Search **50,009 skill fi
 [![npm version](https://img.shields.io/npm/v/omni-skills-forge?color=eab66e&logo=npm)](https://www.npmjs.com/package/omni-skills-forge)
 [![Total npm downloads (all time)](https://img.shields.io/npm/dt/omni-skills-forge?label=Total%20Downloads&color=brightgreen)](https://www.npmjs.com/package/omni-skills-forge)
 [![MIT license](https://img.shields.io/badge/license-MIT-7dd3fc)](LICENSE)
-[![Explore trending projects on Trendshift](https://img.shields.io/badge/Trendshift-Explore%20trending%20projects-6366f1)](https://trendshift.io)
 
 [Quick start](#quick-start) · [All 28 category paths](docs/CATEGORIES.md) · [Installer targets](#installer-targets) · [CLI reference](#cli-reference) · [Source provenance](docs/PROVENANCE.md)
 

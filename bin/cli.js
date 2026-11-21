@@ -15,7 +15,7 @@ import open from 'open';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '..');
 
-const VERSION = '2.1.5';
+const VERSION = '2.1.6';
 
 function showBanner() {
   const banner = gradient.rainbow.multiline(`

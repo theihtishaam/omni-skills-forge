@@ -1,6 +1,6 @@
 {
   "name": "omni-skills-forge",
-  "version": "2.1.5",
+  "version": "2.1.6",
   "description": "Search and install Markdown skills for coding agents. Includes 50,009 skill files across 28 category paths, a local dashboard, and export tools.",
   "main": "src/index.js",
   "bin": {
