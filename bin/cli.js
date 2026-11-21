@@ -8,7 +8,7 @@ import {
   setSkillCategoryState, setSkillSelectionState,
 } from '../src/skill-selection.js';
 
-const VERSION = '2.3.0';
+const VERSION = '2.3.1';
 
 async function loadInstaller() {
   const { OmniInstaller } = await import('../src/installer.js');
@@ -245,15 +245,15 @@ program
 program
   .command('dashboard')
   .aliases(['ui', 'web'])
-  .description('Generate the catalog dashboard or serve project skill settings locally')
+  .description('Open skills for the current workspace, or export an HTML catalog with --output')
   .option('-o, --output <path>', 'Output HTML file path')
-  .option('--no-open', 'Generate without opening in browser')
+  .option('--no-open', 'Print the address or output path without opening a browser')
   .option('--serve', 'Serve project skill settings on localhost')
   .option('--project <dir>', 'Project directory for the management dashboard')
   .option('--port <n>', 'Management dashboard port (0 chooses a free port)', integerOption)
   .action(async (opts) => {
     let destination;
-    if (opts.serve) {
+    if (opts.serve || !opts.output) {
       const { startManagementDashboard } = await import('../src/management-dashboard.js');
       const projectRoot = await resolveSkillProject(opts.project);
       const { url, close } = await startManagementDashboard({ projectRoot, port: opts.port });
@@ -314,21 +314,23 @@ program
     console.log(chalk.gray('Run: npm update -g omni-skills-forge'));
   });
 
-// ── GENERATE ──
 program
-  .command('generate')
-  .description('Regenerate the skill library locally')
-  .option('-n, --count <number>', 'Target skill count', '50000')
-  .action(async (opts) => {
-    showBanner();
-    console.log(chalk.cyan('Generating skill library...'));
-    const { execSync } = await import('child_process');
-    try {
-      execSync(`node scripts/generate-skills.js ${opts.count}`, { stdio: 'inherit' });
-      console.log(chalk.green('\n✓ Skills generated successfully!'));
-    } catch (e) {
-      console.error(chalk.red('Generation failed:'), e.message);
+  .command('make <instruction>')
+  .alias('generate')
+  .description('Make one workspace skill from a plain-language request')
+  .option('--project <dir>', 'Project folder', process.cwd())
+  .option('--directory <folder>', 'Folder inside the project')
+  .option('--agent <name>', 'Limit this skill to one agent', agentOption)
+  .action(async (instruction, opts) => {
+    const { makeWorkspaceSkill } = await import('../src/make-workspace-skill.js');
+    const result = await makeWorkspaceSkill({ project: opts.project, directory: opts.directory,
+      agent: opts.agent, instruction, scope: opts.agent ? 'agent' : 'project' });
+    if (!result.recipe) {
+      console.log(result.reason);
+      return;
     }
+    console.log((result.created ? 'Saved ' : 'Found ') + result.recipe.title);
+    for (const source of result.sources) console.log('  ' + source.path);
   });
 
 try {

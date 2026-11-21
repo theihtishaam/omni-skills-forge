@@ -268,3 +268,32 @@ test('dashboard previews and downloads a composed skill, then saves and changes 
   assert.equal(removed.status, 200);
   assert.deepEqual((await removed.json()).recipes, []);
 });
+
+test('dashboard makes a skill from a task or picked catalog sources in one request', async t => {
+  const { url, projectRoot } = await dashboardFixture(t);
+  const directory = 'apps/storefront';
+  await mkdir(path.join(projectRoot, directory), { recursive: true });
+  await writeFile(path.join(projectRoot, directory, 'package.json'), '{"dependencies":{"react":"^19.0.0"}}');
+  const request = { directory, instruction: 'Improve React accessibility with keyboard navigation' };
+  assert.equal((await post(url, '/api/make-skill', request, { Origin: 'https://example.test' })).status, 403);
+  const made = await post(url, '/api/make-skill', request);
+  assert.equal(made.status, 201);
+  const result = await made.json();
+  assert.equal(result.created, true);
+  assert.equal(result.recipe.agent, null);
+  assert.equal(result.sources[0].path, 'web-dev/react/react-accessibility-a11y-advanced-intermediate.md');
+  assert.match(result.portableMarkdown, /^---\nname:/u);
+  assert.equal((await post(url, '/api/make-skill', request)).status, 200);
+
+  const sourcePaths = [
+    result.sources[0].path,
+    'web-dev/react/react-form-handling-advanced-intermediate.md',
+  ];
+  const merged = await post(url, '/api/make-skill', { directory, agent: 'codex', sourcePaths });
+  assert.equal(merged.status, 201);
+  const combined = await merged.json();
+  assert.equal(combined.recipe.agent, 'codex');
+  assert.deepEqual(combined.sources.map(skill => skill.path), sourcePaths);
+  assert.match(combined.portableMarkdown, /react-form-handling-advanced-intermediate.md/u);
+  assert.equal((await (await fetch(url + '/api/workspace-skills')).json()).recipes.length, 2);
+});

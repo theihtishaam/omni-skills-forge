@@ -1,16 +1,22 @@
 import { createRequire } from 'node:module';
+import { MAX_MAKE_WORKSPACE_INSTRUCTION_LENGTH, makeWorkspaceSkill } from './make-workspace-skill.js';
 import { recordSkillDelivery } from './skill-delivery.js';
 import {
   DEFAULT_SELECTION_MAX_SKILLS, DEFAULT_SELECTION_TOKEN_BUDGET, MAX_SELECTION_QUERY_LENGTH,
   MAX_SELECTION_SKILLS, MAX_SELECTION_TOKEN_BUDGET, SELECTION_AGENTS, resolveSkillProject, selectSkills,
 } from './skill-selection.js';
 import { MAX_WORKSPACE_DIRECTORY_LENGTH } from './workspace-profile.js';
+import { WORKSPACE_SKILL_LIMITS } from './workspace-skills.js';
 
 const { name, version } = createRequire(import.meta.url)('../package.json');
 const PROTOCOL_VERSIONS = ['2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05'];
 const MAX_FRAME_BYTES = 64 * 1024;
 const utf8 = new TextDecoder('utf-8', { fatal: true });
-const INSTRUCTIONS = 'Call select_skills once when starting a new technical task that could use specialist guidance. If an Omni prompt hook already checked the current task, use its result and skip the tool call. An empty result means you can continue without Omni guidance.';
+const INSTRUCTIONS = 'Call select_skills once when starting a new technical task that could use specialist guidance. If an Omni prompt hook already checked the current task, use its result and skip the tool call. An empty result means you can continue without Omni guidance. Call make_workspace_skill only when the user explicitly asks to create and save a combined workspace skill.';
+const DIRECTORY_INPUT = {
+  type: 'string', minLength: 1, maxLength: MAX_WORKSPACE_DIRECTORY_LENGTH,
+  description: 'An existing subdirectory relative to the configured project, such as apps/web. Defaults to the project root.',
+};
 const SELECT_TOOL = {
   name: 'select_skills',
   description: 'Find the enabled Omni skills relevant to the current technical task and return their guidance within a size budget. The server uses this project and agent’s existing settings and records nonempty deliveries locally. Call at the start of a relevant task unless an Omni prompt hook has already checked it.',
@@ -18,10 +24,7 @@ const SELECT_TOOL = {
     type: 'object',
     properties: {
       query: { type: 'string', minLength: 1, maxLength: MAX_SELECTION_QUERY_LENGTH, description: 'Describe the task and its technologies.' },
-      directory: {
-        type: 'string', minLength: 1, maxLength: MAX_WORKSPACE_DIRECTORY_LENGTH,
-        description: 'An existing subdirectory relative to the configured project, such as apps/web. Defaults to the project root.',
-      },
+      directory: DIRECTORY_INPUT,
       tokenBudget: {
         type: 'integer', minimum: 1, maximum: MAX_SELECTION_TOKEN_BUDGET,
         default: DEFAULT_SELECTION_TOKEN_BUDGET, description: 'Estimated token limit for the returned guidance.',
@@ -36,6 +39,28 @@ const SELECT_TOOL = {
   },
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
 };
+const MAKE_TOOL = {
+  name: 'make_workspace_skill',
+  description: 'Save one combined workspace skill when the user explicitly asks to make one. Omni finds eligible catalog sources for the instruction or uses the exact sourcePaths you provide. Returns the saved skill ID and source paths.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      instruction: {
+        type: 'string', minLength: 1, maxLength: MAX_MAKE_WORKSPACE_INSTRUCTION_LENGTH,
+        description: 'Describe the reusable skill the user wants to save.',
+      },
+      directory: DIRECTORY_INPUT,
+      sourcePaths: {
+        type: 'array', minItems: 0, maxItems: WORKSPACE_SKILL_LIMITS.sources, uniqueItems: true,
+        items: { type: 'string', minLength: 1, maxLength: 512 }, description: 'Exact catalog skill paths. Omit or leave empty for automatic picks.',
+      },
+    },
+    required: ['instruction'],
+    additionalProperties: false,
+  },
+  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+};
+const TOOLS = [SELECT_TOOL, MAKE_TOOL];
 
 function isObject(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -49,16 +74,40 @@ function rpcError(id, code, message) {
   return { message: { jsonrpc: '2.0', id, error: { code, message } } };
 }
 
-function validArguments(args) {
-  if (!isObject(args) || typeof args.query !== 'string' || !args.query.trim()) return false;
+function validValue(value, schema) {
+  if (schema.type === 'string') {
+    return typeof value === 'string' && value.trim().length >= schema.minLength && value.length <= schema.maxLength;
+  }
+  if (schema.type === 'array') {
+    return Array.isArray(value) && value.length >= schema.minItems && value.length <= schema.maxItems &&
+      new Set(value).size === value.length && value.every(item => validValue(item, schema.items));
+  }
+  return Number.isInteger(value) && value >= schema.minimum && value <= schema.maximum;
+}
+
+function validArguments(args, { properties, required }) {
+  if (!isObject(args) || !required.every(key => Object.hasOwn(args, key))) return false;
   return Object.entries(args).every(([key, value]) => {
-    if (!Object.hasOwn(SELECT_TOOL.inputSchema.properties, key)) return false;
-    const schema = SELECT_TOOL.inputSchema.properties[key];
-    if (schema.type === 'string') {
-      return typeof value === 'string' && value.trim().length >= schema.minLength && value.length <= schema.maxLength;
-    }
-    return Number.isInteger(value) && value >= schema.minimum && value <= schema.maximum;
+    return Object.hasOwn(properties, key) && validValue(value, properties[key]);
   });
+}
+
+async function makeSkillResponse(id, project, agent, args) {
+  try {
+    const { recipe, created, reason } = await makeWorkspaceSkill({ ...args, project, agent });
+    const text = recipe ? [
+      `${created ? 'Created' : 'Reused'} workspace skill “${recipe.title}”.`,
+      `Workspace skill ID ${recipe.id}.`,
+      !recipe.enabled && 'This saved skill is currently disabled.',
+      '', 'Catalog sources', ...recipe.sourcePaths.map(path => `- ${path}`),
+    ].filter(line => line !== false).join('\n') : reason || 'No eligible catalog skills matched this request.';
+    return rpcResult(id, { content: [{ type: 'text', text }] });
+  } catch (error) {
+    if (error.status === 400) return rpcError(id, -32602, error.message);
+    const text = [404, 409, 422].includes(error.status) ? error.message :
+      'Omni could not save a workspace skill. Check the project’s Omni configuration and try again.';
+    return rpcResult(id, { isError: true, content: [{ type: 'text', text }] });
+  }
 }
 
 function validClient(params) {
@@ -161,12 +210,17 @@ export async function runSkillMcp({ project, agent, input = process.stdin, outpu
         return rpcResult(id, {});
       case 'tools/list':
         if (state !== 'ready') return rpcError(id, -32002, 'The server is not initialized.');
-        return rpcResult(id, { tools: [SELECT_TOOL] });
+        return rpcResult(id, { tools: TOOLS });
       case 'tools/call': {
         if (state !== 'ready') return rpcError(id, -32002, 'The server is not initialized.');
-        if (params?.name !== SELECT_TOOL.name) return rpcError(id, -32602, 'Unknown tool.');
+        const tool = TOOLS.find(candidate => candidate.name === params?.name);
+        if (!tool) return rpcError(id, -32602, 'Unknown tool.');
         const args = params.arguments;
-        if (!validArguments(args)) return rpcError(id, -32602, 'Provide a task query and valid selection options.');
+        if (!validArguments(args, tool.inputSchema)) {
+          return rpcError(id, -32602, tool === SELECT_TOOL ? 'Provide a task query and valid selection options.' :
+            'Provide an instruction and valid workspace skill options.');
+        }
+        if (tool === MAKE_TOOL) return makeSkillResponse(id, root, agent, args);
         try {
           const { markdown, matches, workspace } = await selectSkills({ ...args, project: root, agent });
           if (!markdown || !matches.length) return rpcResult(id, { content: [] });

@@ -207,18 +207,26 @@ export async function listWorkspaceSkills({ project } = {}) {
   return readRecipes(await recipeDirectory(root, false), SELECTION_AGENTS);
 }
 
-export async function createWorkspaceSkill({ project, ...draft } = {}) {
+export async function createWorkspaceSkill({ project, reuseExisting = false, ...draft } = {}) {
   const core = await import('./skill-selection.js');
   const root = await resolveSkillProject(project);
   const recipe = { id: randomUUID(), ...draftFields(draft, core.SELECTION_AGENTS), enabled: true };
   await recipeSources(core, root, recipe, recipe.agent);
+  let existing;
   const state = await updateRecipes(root, core.SELECTION_AGENTS, undefined, recipes => {
+    if (reuseExisting === true) {
+      existing = recipes.find(candidate => candidate.agent === recipe.agent && candidate.title === recipe.title &&
+        candidate.useWhen === recipe.useWhen && candidate.instructions === recipe.instructions &&
+        candidate.sourcePaths.length === recipe.sourcePaths.length &&
+        candidate.sourcePaths.every(source => recipe.sourcePaths.includes(source)));
+      if (existing) return recipes;
+    }
     if (recipes.length >= WORKSPACE_SKILL_LIMITS.recipes) {
       throw issue(`A project can save at most ${WORKSPACE_SKILL_LIMITS.recipes} recipes.`, 'WORKSPACE_RECIPE_LIMIT', 422);
     }
     return [...recipes, recipe];
   });
-  return { ...state, recipe };
+  return { ...state, recipe: existing ?? recipe, created: !existing };
 }
 
 function checkId(id) {

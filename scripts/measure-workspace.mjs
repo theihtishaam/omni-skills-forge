@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import assert from 'node:assert/strict';
 import { recommendWorkspaceSkills, selectSkills, setSkillCategoryState } from '../src/skill-selection.js';
-import { createWorkspaceSkill } from '../src/workspace-skills.js';
+import { makeWorkspaceSkill } from '../src/make-workspace-skill.js';
 
 const run = promisify(execFile);
 const cli = fileURLToPath(new URL('../bin/cli.js', import.meta.url));
@@ -40,11 +40,13 @@ try {
     await measure('React storefront', 'storefront', task),
     await measure('Unrelated request', 'storefront', 'What is the weather like today?'),
   ];
-  const title = 'Checkout form review';
   const useWhen = 'Review checkout keyboard accessibility and form submission';
   const instructions = 'Confirm that a failed checkout submission preserves the customer input.';
-  const sourcePaths = cases[1].skills;
-  await createWorkspaceSkill({ project, agent: 'codex', title, useWhen, instructions, sourcePaths });
+  const made = await makeWorkspaceSkill({ project, directory: 'storefront', agent: 'codex',
+    instruction: 'Make one skill for reviewing keyboard accessibility and form submission in React checkout. ' + instructions });
+  assert.ok(made.created);
+  const title = made.recipe.title;
+  const sourcePaths = made.sources.map(source => source.path);
   const options = { directory: 'storefront', agent: 'codex', project, query: useWhen, maxSkills: 1 };
   const recipe = await selectSkills(options);
   assert.equal(recipe.matches.length, 1);

@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { listSkillDeliveries } from '../src/skill-delivery.js';
 import { runSkillMcp } from '../src/skill-mcp.js';
 import { setSkillSelectionState } from '../src/skill-selection.js';
+import { listWorkspaceSkills } from '../src/workspace-skills.js';
 
 const cli = fileURLToPath(new URL('../bin/cli.js', import.meta.url));
 const skill = 'web-dev/react/react-accessibility-a11y-best-practices-intermediate.md';
@@ -26,6 +27,10 @@ function request(id, method, params) {
 
 function call(id, args) {
   return request(id, 'tools/call', { name: 'select_skills', arguments: args });
+}
+
+function make(id, args) {
+  return request(id, 'tools/call', { name: 'make_workspace_skill', arguments: args });
 }
 
 function runMcp(project, agent, messages) {
@@ -116,16 +121,22 @@ test('Omni MCP negotiates stdio, pins project and agent, and returns only select
     assert.ok(byId.get(1).result.capabilities.tools);
     assert.match(byId.get(1).result.instructions, /prompt hook/);
     for (const message of [byId.get(1), byId.get(2)]) {
-      assert.ok(JSON.stringify(message).length < 2000);
+      assert.ok(JSON.stringify(message).length < 4000);
       assert.ok(!JSON.stringify(message).includes(skill));
     }
-    const [tool] = byId.get(2).result.tools;
-    assert.equal(byId.get(2).result.tools.length, 1);
-    assert.equal(tool.name, 'select_skills');
+    const [tool, maker] = byId.get(2).result.tools;
+    assert.deepEqual(byId.get(2).result.tools.map(({ name }) => name), ['select_skills', 'make_workspace_skill']);
     assert.equal(tool.annotations.readOnlyHint, false);
     assert.equal(tool.annotations.destructiveHint, false);
     assert.equal(tool.inputSchema.properties.directory.type, 'string');
     assert.equal(tool.inputSchema.additionalProperties, false);
+    assert.equal(maker.annotations.readOnlyHint, false);
+    assert.equal(maker.annotations.destructiveHint, false);
+    assert.equal(maker.annotations.idempotentHint, true);
+    assert.deepEqual(maker.inputSchema.required, ['instruction']);
+    assert.equal(maker.inputSchema.additionalProperties, false);
+    assert.equal(maker.inputSchema.properties.sourcePaths.uniqueItems, true);
+    assert.match(maker.description, /explicitly asks/u);
     assert.equal(byId.get(3).result.content.length, 1);
     assert.equal(byId.get(3).result.isError, undefined);
     assert.ok(!byId.get(3).result.content[0].text.includes(skill));
@@ -167,6 +178,100 @@ test('Omni MCP negotiates stdio, pins project and agent, and returns only select
   } finally {
     await rm(project, { recursive: true, force: true });
   }
+});
+
+test('Omni MCP creates and reuses one requested workspace skill without turning selection into a write', async t => {
+  const testRoot = path.resolve(tmpdir());
+  const project = await mkdtemp(path.join(testRoot, 'omni-mcp-make-'));
+  assert.equal(path.dirname(path.resolve(project)), testRoot);
+  assert.match(path.basename(project), /^omni-mcp-make-/u);
+  t.after(() => rm(project, { recursive: true, force: true }));
+  const directory = 'apps/web';
+  await mkdir(path.join(project, directory), { recursive: true });
+  const sourcePaths = [skill, 'web-dev/react/react-accessibility-a11y-testing-intermediate.md'];
+  const instruction = 'Make a reusable React checkout accessibility skill for keyboard navigation';
+  const selection = await runMcp(project, 'codex', [...baseline, call(2, { query: instruction, directory })]);
+  assert.equal(selection[1].result.content.length, 1);
+  assert.deepEqual(await listWorkspaceSkills({ project }), { revision: 0, recipes: [] });
+  const priorDeliveries = await listSkillDeliveries({ project });
+  assert.equal(priorDeliveries.length, 1);
+
+  const invalid = await runMcp(project, 'codex', [
+    ...baseline,
+    make(2, { sourcePaths }),
+    make(3, { instruction, sourcePaths: [skill, skill] }),
+    make(4, { instruction, sourcePaths: [{ path: skill }] }),
+    make(5, { instruction, sourcePaths, agent: 'claude-code' }),
+    make(6, { instruction, sourcePaths, project: testRoot }),
+    make(7, { instruction, sourcePaths, directory: '../outside' }),
+  ]);
+  assert.equal(invalid.length, 7);
+  assert.ok(invalid.slice(1).every(message => message.error?.code === -32602));
+  assert.deepEqual(await listWorkspaceSkills({ project }), { revision: 0, recipes: [] });
+
+  const responses = await runMcp(project, 'codex', [
+    ...baseline,
+    make(2, { instruction, sourcePaths, directory }),
+    make(3, { instruction, sourcePaths: [...sourcePaths].reverse(), directory }),
+  ]);
+  const [created, reused] = responses.slice(1);
+  assert.equal(created.result.isError, undefined);
+  assert.equal(reused.result.isError, undefined);
+  const { revision, recipes } = await listWorkspaceSkills({ project });
+  assert.equal(revision, 1);
+  assert.equal(recipes.length, 1);
+  const [recipe] = recipes;
+  assert.equal(recipe.agent, 'codex');
+  assert.deepEqual(new Set(recipe.sourcePaths), new Set(sourcePaths));
+  for (const [result, action] of [[created.result, 'Created'], [reused.result, 'Reused']]) {
+    assert.equal(result.content.length, 1);
+    const [{ text }] = result.content;
+    assert.ok(text.startsWith(`${action} workspace skill`));
+    assert.ok(text.includes(recipe.title));
+    assert.ok(text.includes(recipe.id));
+    for (const source of sourcePaths) assert.ok(text.includes(source));
+    assert.ok(text.length < 1000);
+    assert.doesNotMatch(text, /## Role|^difficulty:/mu);
+  }
+  await setSkillSelectionState({ project, agent: 'codex', path: sourcePaths[1], status: 'disabled' });
+  const problems = await runMcp(project, 'codex', [
+    ...baseline,
+    make(2, { instruction, sourcePaths: ['web-dev/react/no-such-skill.md'] }),
+    make(3, { instruction, sourcePaths }),
+  ]);
+  assert.equal(problems[1].result.isError, true);
+  assert.match(problems[1].result.content[0].text, /exact path/u);
+  assert.equal(problems[2].result.isError, true);
+  assert.ok(problems[2].result.content[0].text.includes(sourcePaths[1]));
+  assert.deepEqual(await listWorkspaceSkills({ project }), { revision, recipes });
+  assert.deepEqual(await listSkillDeliveries({ project }), priorDeliveries);
+});
+
+test('Omni MCP picks catalog sources for an explicit make request when paths are omitted', async t => {
+  const testRoot = path.resolve(tmpdir());
+  const project = await mkdtemp(path.join(testRoot, 'omni-mcp-rank-'));
+  assert.equal(path.dirname(path.resolve(project)), testRoot);
+  assert.match(path.basename(project), /^omni-mcp-rank-/u);
+  t.after(() => rm(project, { recursive: true, force: true }));
+  const instruction = 'Make a reusable React accessibility workflow for checkout keyboard navigation and form handling';
+  const responses = await runMcp(project, 'claude-code', [
+    ...baseline,
+    make(2, { instruction: 'Make a workspace skill for turquoise marmalade teacups' }),
+    make(3, { instruction }),
+    make(4, { instruction, sourcePaths: [] }),
+  ]);
+  const [unmatched, created, reused] = responses.slice(1);
+  assert.equal(unmatched.result.isError, undefined);
+  assert.match(unmatched.result.content[0].text, /No eligible catalog skill/u);
+  assert.match(created.result.content[0].text, /^Created workspace skill/u);
+  assert.match(reused.result.content[0].text, /^Reused workspace skill/u);
+  const { recipes, revision } = await listWorkspaceSkills({ project });
+  assert.equal(revision, 1);
+  assert.equal(recipes.length, 1);
+  assert.equal(recipes[0].agent, 'claude-code');
+  assert.ok(recipes[0].sourcePaths.length > 0);
+  assert.ok(recipes[0].sourcePaths.every(source => source.startsWith('web-dev/react/')));
+  assert.deepEqual(await listSkillDeliveries({ project }), []);
 });
 
 test('Omni MCP delivers selected guidance when local delivery recording is unavailable', async () => {

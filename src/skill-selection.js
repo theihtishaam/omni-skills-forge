@@ -344,14 +344,18 @@ function taskTerms(value) {
   return [...new Set(words(value).filter(word => !stopWords.has(word) && !genericTopics.has(word) && word.length > 1))];
 }
 
+export function catalogSkillTopic(name) {
+  return name.replace(generatedSuffix, '');
+}
+
 function skillFamily(skill) {
-  return `${skill.category}/${skill.name.replace(generatedSuffix, '')}`;
+  return `${skill.category}/${catalogSkillTopic(skill.name)}`;
 }
 
 function searchIndex(source) {
   source.searchIndex ??= source.registry.skills.map(skill => {
     const title = words(skill.name);
-    const base = skill.name.replace(generatedSuffix, '');
+    const base = catalogSkillTopic(skill.name);
     const description = words(skill.description || '');
     const category = words(skill.category || '');
     const tagged = words((Array.isArray(skill.tags) ? skill.tags : []).join(' '));
@@ -521,7 +525,7 @@ async function selectWorkspaceSkill(scope, terms, technologies, source, header, 
   return null;
 }
 
-export async function selectSkills({ project, directory, agent, query, tokenBudget, maxSkills } = {}) {
+export async function selectSkills({ project, directory, agent, query, tokenBudget, maxSkills, catalogOnly = false } = {}) {
   validateAgent(agent);
   if (typeof query !== 'string' || query.length > MAX_SELECTION_QUERY_LENGTH) {
     throw issue(`The task must be text of up to ${MAX_SELECTION_QUERY_LENGTH} characters.`);
@@ -541,7 +545,7 @@ export async function selectSkills({ project, directory, agent, query, tokenBudg
   const source = await loadCatalog();
   const technologies = explicitTechnologies(terms, query, source.technologies);
   const families = new Set();
-  const selectedWorkspaceSkill = await selectWorkspaceSkill({ projectRoot, state, agent },
+  const selectedWorkspaceSkill = catalogOnly ? null : await selectWorkspaceSkill({ projectRoot, state, agent },
     terms, technologies, source, markdown, tokenBudget);
   if (selectedWorkspaceSkill) {
     result.matches.push(selectedWorkspaceSkill.match);

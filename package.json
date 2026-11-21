@@ -1,7 +1,7 @@
 {
   "name": "omni-skills-forge",
-  "version": "2.3.0",
-  "description": "Match coding skills to your workspace, control categories per agent, and combine selected guidance into reusable skills for prompt hooks or MCP.",
+  "version": "2.3.1",
+  "description": "Browse 50,009 coding skills, find what fits your workspace, and turn a short request or a few selected skills into one reusable skill.",
   "main": "src/index.js",
   "bin": {
     "omni-skills-forge": "bin/cli.js",
@@ -11,7 +11,7 @@
   "scripts": {
     "start": "node bin/cli.js",
     "test": "node --test",
-    "generate": "node scripts/generate-skills.js",
+    "generate": "node bin/cli.js make",
     "build-registry": "node scripts/build-registry.js",
     "prepublishOnly": "node scripts/build-registry.js"
   },
@@ -25,7 +25,10 @@
     "test/",
     "README.md",
     "LICENSE",
-    "assets/",
+    "assets/*.svg",
+    "assets/skills-dashboard.png",
+    "assets/make-a-skill.png",
+    "assets/workspace-comparison.png",
     "docs/"
   ],
   "keywords": [

@@ -36,7 +36,7 @@
     }
   ],
   "workspaceSkill": {
-    "title": "Checkout form review",
+    "title": "React Accessibility and Form Handling",
     "sourcePaths": [
       "web-dev/react/react-accessibility-a11y-advanced-intermediate.md",
       "web-dev/react/react-form-handling-advanced-intermediate.md"

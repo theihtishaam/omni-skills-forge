@@ -22,6 +22,7 @@ import {
 } from './skill-selection.js';
 import { listSkillDeliveries } from './skill-delivery.js';
 import { exportWorkspaceSkillMarkdown } from './workspace-skill-export.js';
+import { makeWorkspaceSkill, MAX_MAKE_WORKSPACE_INSTRUCTION_LENGTH } from './make-workspace-skill.js';
 import {
   composeWorkspaceSkill, createWorkspaceSkill, listWorkspaceSkills, previewWorkspaceSkill, setWorkspaceSkillEnabled,
 } from './workspace-skills.js';
@@ -37,7 +38,6 @@ const UI_ASSETS = [
   ['/', 'index.html', 'text/html; charset=utf-8'],
   ['/dashboard.css', 'dashboard.css', 'text/css; charset=utf-8'],
   ['/dashboard.js', 'dashboard.js', 'text/javascript; charset=utf-8'],
-  ['/skill-builder.js', 'skill-builder.js', 'text/javascript; charset=utf-8'],
 ];
 const SECURITY_HEADERS = {
   'Cache-Control': 'no-store',
@@ -239,6 +239,7 @@ export async function startManagementDashboard({ projectRoot = process.cwd(), po
             categories: categories.length,
             categoryGroups,
             limits: {
+              maxMakeInstructionLength: MAX_MAKE_WORKSPACE_INSTRUCTION_LENGTH,
               maxQueryLength: MAX_SELECTION_QUERY_LENGTH,
               defaultMaxSkills: DEFAULT_SELECTION_MAX_SKILLS,
               maxSkills: MAX_SELECTION_SKILLS,
@@ -283,6 +284,20 @@ export async function startManagementDashboard({ projectRoot = process.cwd(), po
           json(response, 200, await listWorkspaceSkills({ project }));
           return;
         }
+      }
+      if (request.method === 'POST' && route === '/api/make-skill') {
+        const { directory, agent: rawAgent, scope, instruction, sourcePaths } = await readJson(request);
+        const agent = parseAgent(rawAgent);
+        const result = await makeWorkspaceSkill({
+          project, directory, agent, scope: scope ?? (agent ? undefined : 'project'), instruction, sourcePaths,
+        });
+        const portableMarkdown = result.recipe && result.markdown
+          ? exportWorkspaceSkillMarkdown({
+            title: result.recipe.title, useWhen: result.recipe.useWhen, markdown: result.markdown,
+          })
+          : undefined;
+        json(response, result.created ? 201 : 200, { ...result, portableMarkdown });
+        return;
       }
       if (request.method === 'POST' && ['/api/workspace-skills/compose', '/api/workspace-skills/create', '/api/workspace-skills/status', '/api/workspace-skills/remove'].includes(route)) {
         const body = await readJson(request);

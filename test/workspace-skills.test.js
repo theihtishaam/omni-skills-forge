@@ -117,6 +117,24 @@ test('workspace recipe snapshots preserve concurrent edits and retain only two p
   assert.equal(files.filter(file => file.size > 0).length, 2);
 });
 
+test('concurrent identical creation reuses one recipe and preserves its disabled state', async t => {
+  const { project } = await fixture(t);
+  const options = { project, ...draft, agent: 'codex', reuseExisting: true };
+  const attempts = await Promise.all(Array.from({ length: 6 }, () => createWorkspaceSkill(options)));
+  const created = attempts.filter(attempt => attempt.created);
+  assert.equal(created.length, 1);
+  const { recipe, revision } = created[0];
+  assert.equal(revision, 1);
+  assert.ok(attempts.every(attempt => attempt.recipe.id === recipe.id && attempt.revision === revision));
+  const disabled = await setWorkspaceSkillEnabled({ project, id: recipe.id, enabled: false, expectedRevision: revision });
+  const reused = await createWorkspaceSkill({ ...options, sourcePaths: [...draft.sourcePaths].reverse() });
+  assert.equal(reused.created, false);
+  assert.equal(reused.recipe.id, recipe.id);
+  assert.equal(reused.recipe.enabled, false);
+  assert.equal(reused.revision, disabled.revision);
+  assert.equal((await listWorkspaceSkills({ project })).recipes.length, 1);
+});
+
 test('workspace recipes reject unsafe inputs, retain source provenance, and keep fenced text intact', async t => {
   const { project } = await fixture(t);
   for (const sourcePaths of [['../outside.md'], [draft.sourcePaths[0], draft.sourcePaths[0]], Array(6).fill(draft.sourcePaths[0])]) {

@@ -20,5 +20,6 @@ export {
   previewWorkspaceSkill, removeWorkspaceSkill, setWorkspaceSkillEnabled,
 } from './workspace-skills.js';
 export { exportWorkspaceSkillMarkdown } from './workspace-skill-export.js';
-export const VERSION = '2.3.0';
+export { makeWorkspaceSkill, MAX_MAKE_WORKSPACE_INSTRUCTION_LENGTH } from './make-workspace-skill.js';
+export const VERSION = '2.3.1';
 export const SUPPORTED_TOOLS = ['claude-code', 'kilo', 'cline', 'opencode', 'cursor', 'windsurf'];
