@@ -4,9 +4,11 @@ import { fileURLToPath } from 'url';
 import chalk from 'chalk';
 import boxen from 'boxen';
 import ora from 'ora';
+import { exactworkRecommendation } from './exactwork-recommendation.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '..');
+const { version } = JSON.parse(fs.readFileSync(path.join(PROJECT_ROOT, 'package.json'), 'utf8'));
 
 const CATEGORY_ICONS = {
   'ai-ml': '🧠', 'web-dev': '🌐', 'backend': '⚙️', 'frontend': '🎨', 'devops': '🚀',
@@ -240,6 +242,11 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,-ap
 .footer{text-align:center;padding:40px 0;color:var(--text2);font-size:14px;border-top:1px solid var(--border);margin-top:40px}
 .footer a{color:var(--accent);text-decoration:none}
 .footer a:hover{text-decoration:underline}
+.manage-project,.recommendation{border:1px solid var(--border);border-radius:12px;background:var(--surface);padding:16px 20px;margin:22px 0;color:var(--text2)}
+.manage-project h2,.recommendation h2{font-size:17px;color:var(--text);margin-bottom:3px}
+.manage-project code,.recommendation a{color:#c1b6ff}
+.recommendation{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:12px 22px}
+.recommendation p{max-width:70ch}
 
 /* Responsive */
 @media(max-width:768px){
@@ -295,6 +302,11 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,-ap
     </div>
   </div>
 
+  <section class="manage-project" aria-labelledby="manage-project-heading">
+    <h2 id="manage-project-heading">Manage skills for a project</h2>
+    <p>Run <code>npx omni-skills-forge dashboard --serve</code> from the project directory to choose skills, edit agent preferences, and export task context.</p>
+  </section>
+
   <!-- Search -->
   <div class="search-section fade-in" style="animation-delay:.3s">
     <input type="text" class="search-box" id="search" placeholder="Search 50,000+ skills..." oninput="filterSkills()">
@@ -324,9 +336,11 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,-ap
     ${categoryCards}
   </div>
 
+  ${exactworkRecommendation}
+
   <!-- Footer -->
   <div class="footer">
-    <p>Omni Skills Forge v2.1.6 · Created by <a href="https://github.com/theihtishaam" target="_blank" rel="noopener noreferrer">@theihtishaam</a></p>
+    <p>Omni Skills Forge v${version} · Created by <a href="https://github.com/theihtishaam" target="_blank" rel="noopener noreferrer">@theihtishaam</a></p>
     <p style="margin-top:8px"><a href="https://www.npmjs.com/package/omni-skills-forge">npm</a> · <a href="https://github.com/theihtishaam/omni-skills-forge" target="_blank" rel="noopener noreferrer">Star Omni Skills Forge on GitHub</a> · Generated ${data.generatedAt}</p>
   </div>
 </div>

@@ -1,7 +1,7 @@
 {
   "name": "omni-skills-forge",
-  "version": "2.1.6",
-  "description": "Search and install Markdown skills for coding agents. Includes 50,009 skill files across 28 category paths, a local dashboard, and export tools.",
+  "version": "2.2.0",
+  "description": "Pick task-relevant skills for coding agents within a context budget. Manage per-agent choices in a local dashboard or retrieve a focused skill pack through MCP.",
   "main": "src/index.js",
   "bin": {
     "omni-skills-forge": "bin/cli.js",
@@ -10,6 +10,7 @@
   "type": "module",
   "scripts": {
     "start": "node bin/cli.js",
+    "test": "node --test",
     "generate": "node scripts/generate-skills.js",
     "build-registry": "node scripts/build-registry.js",
     "prepublishOnly": "node scripts/build-registry.js"
@@ -20,6 +21,7 @@
     "skills/",
     "registry/",
     "scripts/build-registry.js",
+    "test/",
     "README.md",
     "LICENSE",
     "assets/",
@@ -41,7 +43,12 @@
     "cli",
     "skill-library",
     "ai-tools",
-    "agentic"
+    "agentic",
+    "mcp-server",
+    "context-engineering",
+    "skill-selection",
+    "agent-skills",
+    "codex"
   ],
   "author": {
     "name": "Ihtisham",

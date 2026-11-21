@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Project skill dashboard · Omni Skills Forge</title>
+  <link rel="stylesheet" href="/dashboard.css">
+  <script type="module" src="/dashboard.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to workspace</a>
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="Omni Skills Forge home">
+      <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+      <span>Omni Skills Forge</span>
+    </a>
+    <span class="top-divider" aria-hidden="true"></span>
+    <span class="top-label">Project dashboard</span>
+    <nav class="source-links" aria-label="Project links">
+      <a href="https://github.com/theihtishaam/omni-skills-forge" target="_blank" rel="noopener noreferrer">Repository <span aria-hidden="true">↗</span></a>
+      <a href="https://github.com/theihtishaam" target="_blank" rel="noopener noreferrer">Maintainer <span aria-hidden="true">↗</span></a>
+    </nav>
+  </header>
+
+  <div class="workspace">
+    <aside class="rail" aria-label="Project settings">
+      <div class="project-line">
+        <span class="project-mark" aria-hidden="true">⌑</span>
+        <div><span class="muted small">Local project</span><strong id="project-name">Loading…</strong></div>
+      </div>
+      <div class="rail-controls">
+        <label for="agent">Agent</label>
+        <select id="agent" disabled><option>Loading agents…</option></select>
+        <label for="scope">Edit preferences for</label>
+        <select id="scope">
+          <option value="agent">This agent</option>
+          <option value="project">All agents</option>
+        </select>
+      </div>
+      <nav class="workspace-nav" aria-label="Workspace sections">
+        <a href="#task">Task context</a>
+        <a href="#catalog">Skill catalog</a>
+        <a href="#catalog" id="disabled-link">Disabled skills <span id="disabled-count" class="nav-count">0</span></a>
+      </nav>
+      <div class="rail-foot">
+        <div class="local"><span aria-hidden="true"></span> Local workspace</div>
+        <span id="catalog-total" class="muted small"></span>
+      </div>
+    </aside>
+
+    <main id="main">
+      <div id="task" class="page-heading">
+        <h1>Build task context</h1>
+        <p>Choose relevant skills and cap how much context you take into your next task.</p>
+      </div>
+      <form id="task-form" class="task-form" aria-describedby="task-note">
+        <div class="task-input">
+          <label for="task-query">What are you working on?</label>
+          <textarea id="task-query" rows="3" maxlength="4000" required placeholder="e.g. Improve React accessibility with keyboard navigation"></textarea>
+          <p id="task-note" class="field-note">Your task and selected skill Markdown stay on this machine.</p>
+        </div>
+        <div class="task-limits">
+          <label for="token-budget">Token budget <input id="token-budget" type="number" min="1" max="16000" value="2400" required></label>
+          <label for="max-skills">Max skills <input id="max-skills" type="number" min="1" max="10" value="3" required></label>
+          <button id="run" class="primary" type="submit" disabled>Find relevant skills <span aria-hidden="true">→</span></button>
+        </div>
+      </form>
+
+      <p id="notice" class="notice" role="alert" hidden></p>
+      <div id="live-status" class="visually-hidden" role="status"></div>
+
+      <section id="selection" class="selection" aria-labelledby="selection-heading">
+        <div class="section-title">
+          <div><h2 id="selection-heading">Selected skills</h2><p id="selection-note">Review the matches before taking them into your agent.</p></div>
+          <button id="download" class="secondary" type="button" disabled><span aria-hidden="true">↓</span> Download Markdown</button>
+        </div>
+        <div class="context-layout">
+          <div class="result-pane">
+            <div class="table-labels" aria-hidden="true"><span>Skill and match reason</span><span>Preference</span></div>
+            <div id="selected-list" class="skill-list">
+              <div class="empty">Describe a task and choose <strong>Find relevant skills</strong> to create a shortlist.</div>
+            </div>
+          </div>
+          <aside class="budget" aria-label="Context budget">
+            <h3>Context budget</h3>
+            <div class="tokens"><strong id="used-tokens">0</strong><span id="budget-total">/ 2,400 est. tokens</span></div>
+            <progress id="budget-progress" aria-label="Estimated context budget used" value="0" max="2400"></progress>
+            <div class="budget-caption"><span id="remaining-tokens">2,400 available</span><span id="selection-count">0 / 3 skills</span></div>
+            <hr>
+            <p>Estimates cover the selected skill bundle. Your agent counts its full context separately.</p>
+          </aside>
+        </div>
+      </section>
+
+      <section id="catalog" class="catalog" aria-labelledby="catalog-heading">
+        <div class="section-title">
+          <div><h2 id="catalog-heading">Skill catalog</h2><p id="catalog-scope">Browse the catalog and manage eligibility.</p></div>
+        </div>
+        <form id="catalog-form" class="catalog-form" role="search" aria-label="Skill catalog search">
+          <label for="catalog-query" class="visually-hidden">Filter skills by name, category, or tag</label>
+          <input type="search" id="catalog-query" maxlength="160" placeholder="Filter by skill, category, or tag">
+          <label for="catalog-filter" class="visually-hidden">Filter by eligibility</label>
+          <select id="catalog-filter">
+            <option value="all">All skills</option>
+            <option value="eligible">Eligible for task selection</option>
+            <option value="disabled">Disabled for this agent</option>
+          </select>
+          <button type="submit" class="secondary">Filter</button>
+        </form>
+        <div class="result-pane">
+          <div class="table-labels" aria-hidden="true"><span>Skill</span><span>Preference</span></div>
+          <div id="catalog-list" class="skill-list"><div class="empty">Loading the first page of skills…</div></div>
+        </div>
+        <div class="pagination">
+          <span id="page-summary" class="muted small" aria-live="polite"></span>
+          <div><button id="previous" class="secondary" type="button" disabled>Previous</button><button id="next" class="secondary" type="button" disabled>Next</button></div>
+        </div>
+      </section>
+
+      <!-- exactwork-recommendation -->
+    </main>
+  </div>
+</body>
+</html>

@@ -20,24 +20,23 @@ function walkDir(dir, basePath = '') {
     } else if (entry.name.endsWith('.md')) {
       const content = fs.readFileSync(fullPath, 'utf-8');
       const fm = parseFrontmatter(content);
-      if (fm) {
-        skills.push({
-          name: fm.name || entry.name.replace('.md', ''),
-          category: fm.category || basePath.replace(/\\/g, '/'),
-          version: fm.version || '1.0.0',
-          difficulty: fm.difficulty || 'intermediate',
-          tags: fm.tags || [],
-          description: fm.description || '',
-          file: relPath,
-        });
-      }
+      if (!fm) throw new Error(`Missing skill frontmatter: ${relPath}`);
+      skills.push({
+        name: fm.name || entry.name.replace('.md', ''),
+        category: fm.category || basePath.replace(/\\/g, '/'),
+        version: fm.version || '1.0.0',
+        difficulty: fm.difficulty || 'intermediate',
+        tags: fm.tags || [],
+        description: fm.description || '',
+        file: relPath,
+      });
     }
   }
   return skills;
 }
 
 function parseFrontmatter(content) {
-  const match = content.match(/^---\n([\s\S]*?)\n---/);
+  const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/);
   if (!match) return null;
   const fm = {};
   for (const line of match[1].split('\n')) {
@@ -56,6 +55,7 @@ function parseFrontmatter(content) {
 function buildRegistry() {
   console.log('Scanning skills directory...');
   const skills = walkDir(SKILLS_DIR);
+  if (!skills.length) throw new Error('The catalog is empty. Check the skills directory before publishing.');
   const categories = [...new Set(skills.map(s => s.category).filter(Boolean))];
 
   const registry = {

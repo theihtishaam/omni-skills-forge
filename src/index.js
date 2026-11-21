@@ -8,5 +8,6 @@ export { OmniUI } from './ui.js';
 export { OmniDashboard } from './dashboard.js';
 export { OmniDoctor } from './doctor.js';
 
-export const VERSION = '2.1.6';
+export { loadSkillSelectionState, setSkillSelectionState, selectSkills, exportSkillContext } from './skill-selection.js';
+export const VERSION = '2.2.0';
 export const SUPPORTED_TOOLS = ['claude-code', 'kilo', 'cline', 'opencode', 'cursor', 'windsurf'];

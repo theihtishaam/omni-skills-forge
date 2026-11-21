@@ -1,6 +1,6 @@
 # Omni Skills Forge
 
-Find and install Markdown skills for your coding agent. Search **50,009 skill files across 28 category paths**, inspect a skill's source and difficulty, and copy it to a directory you choose. The `osf` CLI also generates a local catalog dashboard and exports the full registry as JSON or CSV.
+Pick skills for the task in front of you. Omni searches **50,009 local Markdown skill files** and gives a connected agent a small selection within a budget you set. You can turn a skill off for one agent or for everyone working in a project.
 
 [![Star Omni Skills Forge on GitHub](https://img.shields.io/github/stars/theihtishaam/omni-skills-forge?label=Star%20on%20GitHub&style=for-the-badge&logo=github)](https://github.com/theihtishaam/omni-skills-forge)
 [![Follow @theihtishaam on GitHub](https://img.shields.io/github/followers/theihtishaam?label=Follow%20%40theihtishaam&style=for-the-badge&logo=github)](https://github.com/theihtishaam)
@@ -11,18 +11,46 @@ Find and install Markdown skills for your coding agent. Search **50,009 skill fi
 [![Total npm downloads (all time)](https://img.shields.io/npm/dt/omni-skills-forge?label=Total%20Downloads&color=brightgreen)](https://www.npmjs.com/package/omni-skills-forge)
 [![MIT license](https://img.shields.io/badge/license-MIT-7dd3fc)](LICENSE)
 
-[Quick start](#quick-start) · [All 28 category paths](docs/CATEGORIES.md) · [Installer targets](#installer-targets) · [CLI reference](#cli-reference) · [Source provenance](docs/PROVENANCE.md)
+[Quick start](#quick-start) · [Automatic selection](#automatic-selection) · [Catalog](#catalog) · [CLI reference](#cli-reference)
 
 ![Omni Skills Forge. 50,009 Markdown skill files across 28 category paths and six installer targets.](https://raw.githubusercontent.com/theihtishaam/omni-skills-forge/main/assets/banner.svg)
 
 ## Quick start
 
-Use Node.js 18 or later. Try a React accessibility skill and review the copied file before configuring your agent.
+Use Node.js 18 or later. From your project directory:
+
+```sh
+npm install -g omni-skills-forge@latest
+osf dashboard --serve --project .
+```
+
+Choose an agent, paste a task such as “Review React accessibility for keyboard navigation and focus in a form,” and build a preview. The dashboard shows the matching skills, why they qualified, and the estimated size of the text. Under **Skill catalog**, change eligibility for this agent or for the whole project. A project-wide exclusion applies to every agent.
+
+![The local dashboard picking skills for a React accessibility task, with an agent selector, relevance reasons and a context budget](https://raw.githubusercontent.com/theihtishaam/omni-skills-forge/v2.2.0/assets/dashboard-task-context.png)
+
+To try the same selection from a terminal, run:
+
+```sh
+osf select "Review React accessibility for keyboard navigation and focus in a form" --agent codex --project . --max-skills 2 --token-budget 1400
+```
+
+With the default preferences in the 2.2.0 catalog, that example selects two files covering React accessibility and form handling. Their combined pack uses **823 estimated tokens** of the 1,400-token budget. The rest of the catalog contributes no skill text to the pack.
+
+### Automatic selection
+
+Codex and Claude Code can call Omni on each submitted prompt through a project hook. A matching prompt receives a skill pack. An unrelated prompt receives no skill text. Other compatible agents can request a pack using the read-only MCP tool `select_skills`. The host decides when to call it. Pick one method per host to avoid receiving the same guidance twice. [Host setup and examples](https://github.com/theihtishaam/omni-skills-forge/blob/v2.2.0/docs/TASK_SKILLS.md)
+
+By default a pack has room for up to **3 skills** and **2,400 estimated tokens**. Eligible skills stay on standby until they match. Settings apply to packs produced by Omni. A skill previously installed as an always-on rule in another application follows that application's rules. The budget covers the selected text. A host can also spend tokens on its own instructions and tool descriptions.
+
+![Agent-specific skill preferences in the running local dashboard](https://raw.githubusercontent.com/theihtishaam/omni-skills-forge/v2.2.0/assets/dashboard-agent-preferences.png)
+
+### Copy a skill by hand
+
+You can still inspect and copy an individual file without connecting an agent.
 
 ![Find a skill with search, inspect its path and difficulty, and copy it to a chosen directory.](https://raw.githubusercontent.com/theihtishaam/omni-skills-forge/main/assets/workflow.svg)
 
 ```bash
-npm install -g omni-skills-forge
 osf search react-accessibility --limit 8
 osf info react-accessibility-a11y-best-practices
 osf install --skill react-accessibility-a11y-best-practices --tool cursor --dir ./sample-directory --dry-run
@@ -74,6 +102,11 @@ Use an explicit `--tool` and `--dir` to control where files go. `--all` selects 
 
 | Command | What it does |
 | --- | --- |
+| `osf dashboard --serve --project .` | Open the interactive project dashboard and manage skill choices by agent. |
+| `osf select "task" --agent codex --project .` | Preview the selected context. Add `--output ./task-skills.md` to save a new Markdown file. |
+| `osf disable <catalog-path> --agent claude-code --project .` | Exclude this file from Claude Code's selections in this project. Omit `--agent` to exclude it across agents. |
+| `osf enable <catalog-path> --agent claude-code --project .` | Allow this file to compete when it matches, subject to the project's policy. |
+| `osf mcp --project . --agent codex` | Serve a single read-only task selection tool over standard input/output. |
 | `osf` | Opens the interactive menu. |
 | `osf search <query> --limit 25` | Matches names, descriptions, or tags across the full registry. |
 | `osf info <name>` | Shows the selected registry entry, including the file path. |
@@ -86,11 +119,13 @@ Use an explicit `--tool` and `--dir` to control where files go. `--all` selects 
 | `osf export --format json --output ./osf-registry.json` | Exports the full registry. CSV and Markdown (`md`) are also available. The Markdown output summarizes each family and includes up to 20 entries per family. |
 | `osf update` | Prints the current package version and the npm update command. |
 
-The dashboard filters the sample cards embedded in its generated HTML. Use `osf search` or `osf list --json` to search or export the full catalog. Dashboard copy buttons copy a CLI command. Review its destination before running it.
+The exported HTML dashboard filters the sample cards embedded in that file. Use the interactive dashboard to search the catalog, change agent preferences and preview the actual context for a task.
 
 The `uninstall` command scans the default client directories and removes matching Markdown or rule files, including files from other sources. Use `osf uninstall --tool cursor --dry-run` to inspect the scope. For a custom `--dir` install, manage that output folder directly.
 
-## Related project
+## For work that spans several sessions
+
+**Exactwork** is a companion for jobs where it matters how the agent carries out the work. For example, a database migration needs a record of the accepted plan, checks on the changed paths and a usable handoff for the next session. Start with its core skill, then add research, review or handoff when the task calls for it. The dashboard links to the install guide. [Explore Exactwork Skills](https://github.com/theihtishaam/exactwork-skills)
 
 [Agent Shadow Brain](https://github.com/theihtishaam/agents-brain) gives coding agents shared project memory for decisions, context, and session handoffs.
 

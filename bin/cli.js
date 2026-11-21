@@ -1,21 +1,31 @@
 #!/usr/bin/env node
 import { Command } from 'commander';
-import { OmniInstaller } from '../src/installer.js';
-import { OmniUI } from '../src/ui.js';
-import { OmniDashboard } from '../src/dashboard.js';
-import { OmniDoctor } from '../src/doctor.js';
 import chalk from 'chalk';
 import boxen from 'boxen';
 import gradient from 'gradient-string';
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import open from 'open';
+import {
+  SELECTION_AGENTS, exportSkillContext, resolveSkillProject, selectSkills, setSkillSelectionState,
+} from '../src/skill-selection.js';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const PROJECT_ROOT = path.resolve(__dirname, '..');
+const VERSION = '2.2.0';
 
-const VERSION = '2.1.6';
+async function loadInstaller() {
+  const { OmniInstaller } = await import('../src/installer.js');
+  return new OmniInstaller();
+}
+
+function integerOption(value) {
+  const number = Number(value);
+  if (!/^\d+$/u.test(value) || !Number.isSafeInteger(number)) {
+    throw new Error('Expected a whole number.');
+  }
+  return number;
+}
+
+function agentOption(value) {
+  if (!SELECTION_AGENTS.includes(value)) throw new Error(`Choose one of: ${SELECTION_AGENTS.join(', ')}.`);
+  return value;
+}
 
 function showBanner() {
   const banner = gradient.rainbow.multiline(`
@@ -32,19 +42,16 @@ const program = new Command();
 
 program
   .name('omni-skills-forge')
-  .description('50,000+ expert AI agent skills — install to any AI coding tool')
+  .description('Search, select, and install Markdown skills for coding agents')
   .version(VERSION)
   .addHelpText('before', () => { showBanner(); return ''; })
   .addHelpText('after', () => {
     console.log('');
     console.log(boxen(
       chalk.bold(' Quick Start:') + '\n\n' +
-      chalk.cyan('  osf install --all') + chalk.gray('              # Install all 50,000+ skills') + '\n' +
-      chalk.cyan('  osf install --category ai-ml') + chalk.gray('    # Install by category') + '\n' +
-      chalk.cyan('  osf install --tag react') + chalk.gray('         # Install by tag') + '\n' +
-      chalk.cyan('  osf install --difficulty expert') + chalk.gray('   # Install by difficulty') + '\n' +
+      chalk.cyan('  osf select "React accessibility testing"') + chalk.gray('  # Preview task matches') + '\n' +
+      chalk.cyan('  osf dashboard --serve') + chalk.gray('  # Open project skill settings') + '\n' +
       chalk.cyan('  osf search "kubernetes"') + chalk.gray('        # Search skills') + '\n' +
-      chalk.cyan('  osf dashboard') + chalk.gray('                  # Open visual dashboard') + '\n' +
       chalk.cyan('  osf doctor') + chalk.gray('                      # Diagnose environment'),
       { padding: 1, borderColor: 'cyan', borderStyle: 'round', title: ' Examples ' }
     ));
@@ -67,7 +74,7 @@ program
   .option('--dry-run', 'Preview what would be installed without writing files')
   .action(async (opts) => {
     showBanner();
-    const installer = new OmniInstaller();
+    const installer = await loadInstaller();
     if (opts.all) {
       await installer.installAll(opts);
     } else if (opts.category) {
@@ -79,6 +86,7 @@ program
     } else if (opts.difficulty) {
       await installer.installByDifficulty(opts.difficulty, opts);
     } else {
+      const { OmniUI } = await import('../src/ui.js');
       const ui = new OmniUI(installer);
       await ui.runInteractive();
     }
@@ -93,7 +101,7 @@ program
   .option('--dry-run', 'Preview what would be removed')
   .action(async (opts) => {
     showBanner();
-    const installer = new OmniInstaller();
+    const installer = await loadInstaller();
     await installer.uninstall(opts);
   });
 
@@ -107,7 +115,7 @@ program
   .option('--difficulty <level>', 'Filter by difficulty')
   .option('--json', 'Output raw JSON')
   .action(async (opts) => {
-    const installer = new OmniInstaller();
+    const installer = await loadInstaller();
     await installer.listSkills(opts);
   });
 
@@ -119,8 +127,74 @@ program
   .argument('<query>', 'Search query')
   .option('-l, --limit <n>', 'Max results', '25')
   .action(async (query, opts) => {
-    const installer = new OmniInstaller();
+    const installer = await loadInstaller();
     await installer.searchSkills(query, opts);
+  });
+
+program
+  .command('select')
+  .description('Preview relevant skills for a task or export a bounded Markdown context pack')
+  .argument('<query>', 'Task description')
+  .option('--project <dir>', 'Project directory')
+  .option('--agent <id>', 'Apply an agent’s project preferences', agentOption)
+  .option('--token-budget <n>', 'Estimated input token budget', integerOption)
+  .option('--max-skills <n>', 'Maximum selected skills', integerOption)
+  .option('-o, --output <file>', 'Write a new Markdown context pack inside the project')
+  .option('--json', 'Show selection metadata as JSON')
+  .action(async (query, options) => {
+    const selection = options.output
+      ? await exportSkillContext({ ...options, query })
+      : await selectSkills({ ...options, query });
+    const { markdown, ...summary } = selection;
+    if (options.json) {
+      console.log(JSON.stringify(summary, null, 2));
+    } else if (!summary.matches.length) {
+      console.log('No catalog skills matched within the requested limits.');
+    } else {
+      for (const match of summary.matches) {
+        console.log(`${match.path} (~${match.estimatedTokens} tokens)\n  ${match.reason}`);
+      }
+      console.log(`Estimated context size: ${summary.estimatedTokens} of ${summary.tokenBudget} input tokens.`);
+      if (summary.output) console.log(`Wrote ${summary.output}`);
+    }
+  });
+
+for (const [command, status, description] of [
+  ['enable', 'enabled', 'Prefer a catalog skill when it matches a task'],
+  ['disable', 'disabled', 'Exclude a catalog skill from task selection'],
+  ['reset-skill', 'default', 'Restore default eligibility for a catalog skill'],
+]) {
+  program.command(command)
+    .description(description)
+    .argument('<skill-path>', 'Exact relative path shown in the catalog')
+    .option('--project <dir>', 'Project directory')
+    .option('--agent <id>', 'Limit this preference to one agent', agentOption)
+    .action(async (skillPath, { project, agent }) => {
+      const { revision } = await setSkillSelectionState({ project, agent, path: skillPath, status });
+      console.log(`${skillPath}: ${status} (${agent || 'all agents'}, revision ${revision})`);
+    });
+}
+
+program
+  .command('mcp')
+  .description('Start the task skill selection MCP server over stdio')
+  .option('--project <dir>', 'Project directory')
+  .requiredOption('--agent <id>', 'Agent using the MCP server', agentOption)
+  .action(async options => {
+    const { runSkillMcp } = await import('../src/skill-mcp.js');
+    await runSkillMcp(options);
+  });
+
+program
+  .command('hook')
+  .description('Read a prompt hook event from stdin and return relevant context to the host')
+  .option('--project <dir>', 'Project directory')
+  .requiredOption('--agent <id>', 'Agent sending the prompt hook event', agentOption)
+  .option('--token-budget <n>', 'Estimated input token budget', integerOption)
+  .option('--max-skills <n>', 'Maximum selected skills', integerOption)
+  .action(async options => {
+    const { runPromptHook } = await import('../src/skill-prompt-hook.js');
+    await runPromptHook(options);
   });
 
 // ── INFO ──
@@ -129,7 +203,7 @@ program
   .description('Show detailed info about a specific skill')
   .argument('<name>', 'Skill name')
   .action(async (name) => {
-    const installer = new OmniInstaller();
+    const installer = await loadInstaller();
     await installer.showSkillInfo(name);
   });
 
@@ -139,7 +213,7 @@ program
   .aliases(['cats'])
   .description('Browse all skill categories')
   .action(async () => {
-    const installer = new OmniInstaller();
+    const installer = await loadInstaller();
     await installer.listCategories();
   });
 
@@ -149,7 +223,7 @@ program
   .description('Show library statistics')
   .action(async () => {
     showBanner();
-    const installer = new OmniInstaller();
+    const installer = await loadInstaller();
     await installer.showStats();
   });
 
@@ -157,21 +231,35 @@ program
 program
   .command('dashboard')
   .aliases(['ui', 'web'])
-  .description('Generate and open an interactive visual dashboard')
+  .description('Generate the catalog dashboard or serve project skill settings locally')
   .option('-o, --output <path>', 'Output HTML file path')
   .option('--no-open', 'Generate without opening in browser')
+  .option('--serve', 'Serve project skill settings on localhost')
+  .option('--project <dir>', 'Project directory for the management dashboard')
+  .option('--port <n>', 'Management dashboard port (0 chooses a free port)', integerOption)
   .action(async (opts) => {
-    showBanner();
-    const installer = new OmniInstaller();
-    const registry = await installer._loadRegistry();
-    const dashboard = new OmniDashboard(registry);
-    const outputPath = await dashboard.generate(opts);
+    let destination;
+    if (opts.serve) {
+      const { startManagementDashboard } = await import('../src/management-dashboard.js');
+      const projectRoot = await resolveSkillProject(opts.project);
+      const { url, close } = await startManagementDashboard({ projectRoot, port: opts.port });
+      destination = url;
+      console.log(`Omni Skills Forge dashboard: ${url}`);
+      process.once('SIGINT', () => void close());
+      process.once('SIGTERM', () => void close());
+    } else {
+      showBanner();
+      const installer = await loadInstaller();
+      const { OmniDashboard } = await import('../src/dashboard.js');
+      const dashboard = new OmniDashboard(await installer._loadRegistry());
+      destination = await dashboard.generate(opts);
+    }
     if (opts.open !== false) {
-      console.log(chalk.cyan('  Opening dashboard in browser...'));
       try {
-        await open(outputPath);
+        const { default: open } = await import('open');
+        await open(destination);
       } catch {
-        console.log(chalk.yellow(`  Could not auto-open. Open manually: ${outputPath}`));
+        console.log(chalk.yellow(`  Could not auto-open. Open manually: ${destination}`));
       }
     }
   });
@@ -182,6 +270,7 @@ program
   .aliases(['check', 'diagnose'])
   .description('Diagnose your environment and tool installations')
   .action(async () => {
+    const { OmniDoctor } = await import('../src/doctor.js');
     const doctor = new OmniDoctor();
     await doctor.run();
   });
@@ -195,7 +284,7 @@ program
   .option('-o, --output <path>', 'Output file path')
   .action(async (opts) => {
     showBanner();
-    const installer = new OmniInstaller();
+    const installer = await loadInstaller();
     await installer.exportSkills(opts);
   });
 
@@ -228,4 +317,9 @@ program
     }
   });
 
-program.parse();
+try {
+  await program.parseAsync();
+} catch (error) {
+  console.error(error.message);
+  process.exitCode = 1;
+}
