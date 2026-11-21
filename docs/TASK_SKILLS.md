@@ -1,8 +1,10 @@
 # Connect your agent to Omni
 
-Open `osf dashboard` in the project. Its suggestions come from recognized project files in your working folder or its nearest recognized parent inside the project. Use the category menu and switches to decide what the agent can use. A project-wide exclusion also applies to individually enabled skills and to saved combinations that use an excluded file.
+Open `osf dashboard` in the project. Its suggestions come from recognized project files in your working folder or its nearest recognized parent inside the project. **All skills**, the category switches and the switch on each file control what the agent can use.
 
-For example, `osf disable --category devops/docker --agent codex --project .` switches Docker off for Codex in this project. Replace `disable` with `enable` to allow it again.
+For a short allowlist, switch the entire catalog off and enable only the files or categories you want at that same scope. A bulk change replaces earlier choices within that group and scope. Use the project scope to change a project rule. An agent setting cannot reopen a source that the project still excludes. If a saved combination contains an excluded file, Omni skips the combination on subsequent tasks.
+
+The CLI follows the same rules. For example, `osf disable --all --agent codex --project .` switches the catalog off for Codex. Run `osf enable --category devops/docker --agent codex --project .` to allow just Docker, or pass an individual catalog file path in place of `--category devops/docker` to allow only that file.
 
 Use the Codex or Claude Code prompt hook to provide guidance automatically. Start a message with “Make one skill for …” when you want Omni to save a new skill in the workspace. Other compatible agents can find and make skills through MCP. Pick one delivery route per host to avoid receiving the same guidance twice.
 

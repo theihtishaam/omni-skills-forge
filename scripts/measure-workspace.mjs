@@ -5,7 +5,10 @@ import { execFile } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import assert from 'node:assert/strict';
-import { recommendWorkspaceSkills, selectSkills, setSkillCategoryState } from '../src/skill-selection.js';
+import {
+  getSkillEligibility, loadSkillSelectionCatalog, loadSkillSelectionState, recommendWorkspaceSkills,
+  selectSkills, setAllSkillsState, setSkillCategoryState, setSkillSelectionState,
+} from '../src/skill-selection.js';
 import { listWorkspaceSkills } from '../src/workspace-skills.js';
 
 const run = promisify(execFile);
@@ -68,7 +71,26 @@ try {
   const workspaceSkill = { title, sourcePaths, savedAfterFirstRequest: first.recipes.length,
     savedAfterRepeat: repeat.recipes.length, deliveredAs: recipe.matches.length,
     guidanceReachedCodex: true, guidanceReachedClaude: false, guidanceReachedCodexAfterCategoryDisabled: false };
-  console.log(JSON.stringify({ task, agent: 'codex', standbySuggestions: standby.suggestions.length, cases, workspaceSkill }, null, 2));
+  const { skills } = await loadSkillSelectionCatalog();
+  const policy = { project, agent: 'codex' };
+  async function eligibleCount() {
+    const state = await loadSkillSelectionState({ project });
+    return skills.filter(skill => getSkillEligibility(state, skill.file, policy.agent) !== 'disabled').length;
+  }
+  await setAllSkillsState({ ...policy, status: 'disabled' });
+  const allOff = await eligibleCount();
+  assert.equal(allOff, 0);
+  await setSkillSelectionState({ ...policy, path: sourcePaths[0], status: 'enabled' });
+  const oneOn = await eligibleCount();
+  assert.equal(oneOn, 1);
+  await setSkillCategoryState({ ...policy, category: 'web-dev/react', status: 'enabled' });
+  const reactOn = await eligibleCount();
+  assert.equal(reactOn, skills.filter(skill => skill.category === 'web-dev/react').length);
+  await setAllSkillsState({ ...policy, status: 'enabled' });
+  const allOn = await eligibleCount();
+  assert.equal(allOn, skills.length);
+  console.log(JSON.stringify({ task, agent: 'codex', standbySuggestions: standby.suggestions.length, cases, workspaceSkill,
+    catalogSwitches: { allOff, oneOn, reactOn, allOn } }, null, 2));
 } finally {
   await rm(project, { recursive: true, force: true });
 }

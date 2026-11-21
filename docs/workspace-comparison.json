@@ -47,5 +47,11 @@
     "guidanceReachedCodex": true,
     "guidanceReachedClaude": false,
     "guidanceReachedCodexAfterCategoryDisabled": false
+  },
+  "catalogSwitches": {
+    "allOff": 0,
+    "oneOn": 1,
+    "reactOn": 2401,
+    "allOn": 50009
   }
 }

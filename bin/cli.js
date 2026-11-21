@@ -5,7 +5,7 @@ import boxen from 'boxen';
 import gradient from 'gradient-string';
 import {
   SELECTION_AGENTS, exportSkillContext, resolveSkillProject, selectSkills,
-  setSkillCategoryState, setSkillSelectionState,
+  setAllSkillsState, setSkillCategoryState, setSkillSelectionState,
 } from '../src/skill-selection.js';
 
 const VERSION = '2.3.1';
@@ -169,24 +169,35 @@ program
   });
 
 for (const [command, status, description] of [
-  ['enable', 'enabled', 'Allow a matching catalog skill or category'],
-  ['disable', 'disabled', 'Exclude a catalog skill or category from task selection'],
+  ['enable', 'enabled', 'Allow matching skills in a file, category, or the whole catalog'],
+  ['disable', 'disabled', 'Exclude a skill, category, or the whole catalog from task selection'],
   ['reset-skill', 'default', 'Restore default eligibility for a catalog skill or category'],
 ]) {
-  program.command(command)
+  const preference = program.command(command)
     .description(description)
     .argument('[skill-path]', 'Exact relative path shown in the catalog')
     .option('--category <category>', 'Exact catalog category path or family')
     .option('--project <dir>', 'Project directory')
-    .option('--agent <id>', 'Limit this preference to one agent', agentOption)
-    .action(async (skillPath, { category, project, agent }) => {
-      if (Boolean(skillPath) === Boolean(category)) throw new Error('Choose one skill path or use --category.');
-      const options = { project, agent, status };
+    .option('--agent <id>', 'Limit this preference to one agent', agentOption);
+  if (status !== 'default') preference.option('--all', 'Change eligibility for the entire catalog in this scope');
+  preference.action(async (skillPath, { all, category, project, agent }) => {
+    const targets = [skillPath, category, all].filter(Boolean).length;
+    if (targets !== 1) {
+      throw new Error(status === 'default'
+        ? 'Choose one skill path or use --category.'
+        : 'Choose one skill path, --category, or --all.');
+    }
+    const options = { project, agent, status };
+    if (all) {
+      const { revision } = await setAllSkillsState(options);
+      console.log(`All catalog skills are ${status} for ${agent || 'all agents'} at revision ${revision}.`);
+    } else {
       const { revision } = category
         ? await setSkillCategoryState({ ...options, category })
         : await setSkillSelectionState({ ...options, path: skillPath });
       console.log(`${category || skillPath} is ${status} for ${agent || 'all agents'} at revision ${revision}.`);
-    });
+    }
+  });
 }
 
 program

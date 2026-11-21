@@ -104,11 +104,11 @@ function updateControls() {
     state.catalog.page * state.catalog.pageSize >= state.catalog.total;
 }
 
-function toggle(label, enabled, disabled, onClick) {
+function toggle(label, enabled, disabled, onClick, aggregate = false) {
   const button = node('button', 'switch');
   button.type = 'button';
   button.disabled = disabled;
-  button.setAttribute('role', 'switch');
+  button.setAttribute('role', aggregate ? 'checkbox' : 'switch');
   button.setAttribute('aria-label', label);
   button.setAttribute('aria-checked', String(enabled));
   const track = node('span', 'switch-track');
@@ -120,34 +120,100 @@ function toggle(label, enabled, disabled, onClick) {
 
 function blockMessage(rule) {
   const agent = rule.scope === 'project' ? 'all agents' : agentLabels[state.agent];
+  if (rule.type === 'all') return 'All skills are off for ' + agent;
   return rule.category ? 'Blocked by ' + categoryName(rule.category) + ' for ' + agent : 'Disabled for ' + agent;
 }
 
-function preference(entry, revision, isCategory) {
+function preference(entry, revision) {
   const project = editingProject();
   const value = project ? entry.projectStatus : entry.agentStatus;
-  const block = project ? entry.projectBlock : entry.agentBlock;
-  const enabled = value !== 'disabled' && !block;
+  const block = !project && entry.projectEffective.status === 'disabled' ? entry.projectEffective : null;
+  const enabled = (project ? entry.projectEffective : entry.effective).status !== 'disabled';
   const fresh = !state.busy && revision === state.revision;
-  const name = isCategory ? categoryName(entry.category) : skillName(entry);
-  const key = isCategory ? entry.category : entry.path;
-  const container = node('div', isCategory ? 'category-switch' : 'skill-control');
-  if (isCategory) container.append(node('strong', '', name));
+  const name = skillName(entry);
+  const container = node('div', 'skill-control');
   const scopeName = project ? 'all agents' : agentLabels[state.agent];
   const change = toggle('Allow ' + name + ' for ' + scopeName, enabled, !fresh || Boolean(block),
-    () => void savePreference(key, isCategory, enabled ? 'disabled' : 'enabled'));
-  change.dataset.policy = key;
+    () => void savePreference(entry.path, 'skill', enabled ? 'disabled' : 'enabled'));
+  change.dataset.policy = entry.path;
   container.append(change);
   if (value !== 'default') {
     const reset = node('button', 'reset', 'Reset');
     reset.type = 'button';
     reset.disabled = !fresh;
     reset.setAttribute('aria-label', 'Reset ' + name + ' preference');
-    reset.addEventListener('click', () => void savePreference(key, isCategory, 'default'));
+    reset.addEventListener('click', () => void savePreference(entry.path, 'skill', 'default'));
     container.append(reset);
   }
   const rule = block || (project && enabled && entry.effective.status === 'disabled' ? entry.effective : null);
   if (rule) container.append(node('span', 'policy-reason', blockMessage(rule)));
+  return container;
+}
+
+function aggregatePreference(result, kind) {
+  const isCategory = kind === 'category';
+  const entry = isCategory ? result?.categoryPreference : result?.allSkillsPreference;
+  const key = isCategory ? entry.category : 'all';
+  const name = isCategory ? categoryName(key) : 'All skills';
+  const container = node('div', 'category-switch');
+  container.append(node('strong', '', name));
+  if (!entry) {
+    const loading = toggle('All skills', false, true, () => {}, true);
+    loading.lastChild.textContent = 'Loading…';
+    container.append(loading);
+    return container;
+  }
+
+  const project = editingProject();
+  const counts = result.counts;
+  const total = isCategory ? counts.category : counts.catalog;
+  const projectDisabled = isCategory ? counts.categoryProjectDisabled : counts.projectDisabled;
+  const disabled = project ? projectDisabled : isCategory ? counts.categoryDisabled : counts.disabled;
+  const checked = disabled === total ? false : disabled === 0 ? true : 'mixed';
+  const fresh = !state.busy && !state.catalogLoading && result.revision === state.revision;
+  const locked = !project && projectDisabled === total;
+  const scopeName = project ? 'all agents' : agentLabels[state.agent];
+  const summary = number.format(total - disabled) + ' of ' + number.format(total) + ' enabled';
+  if (checked === 'mixed') {
+    const indicator = node('span', 'mixed-control');
+    indicator.setAttribute('role', 'checkbox');
+    indicator.setAttribute('aria-checked', 'mixed');
+    indicator.setAttribute('aria-disabled', 'true');
+    indicator.setAttribute('aria-label', name + ' for ' + scopeName);
+    indicator.setAttribute('aria-description', summary);
+    indicator.title = summary;
+    const track = node('span', 'switch-track');
+    track.setAttribute('aria-hidden', 'true');
+    indicator.append(track, node('span', '', 'Mixed'));
+    container.append(indicator);
+    for (const [status, label, verb] of [['enabled', 'On', 'Enable'], ['disabled', 'Off', 'Disable']]) {
+      const action = node('button', 'secondary bulk-action', label);
+      action.type = 'button';
+      action.disabled = !fresh;
+      action.setAttribute('aria-label', verb + ' ' + name + ' for ' + scopeName);
+      action.dataset.policy = key;
+      action.dataset.action = status;
+      action.addEventListener('click', () => void savePreference(key, kind, status));
+      container.append(action);
+    }
+  } else {
+    const next = checked ? 'disabled' : 'enabled';
+    const change = toggle('Allow ' + name + ' for ' + scopeName, checked, !fresh || locked,
+      () => void savePreference(key, kind, next), true);
+    change.dataset.policy = key;
+    change.setAttribute('aria-description', summary);
+    container.append(change);
+  }
+  const configured = project ? entry.projectStatus : entry.agentStatus;
+  if (isCategory && configured !== 'default') {
+    const reset = node('button', 'reset', 'Reset');
+    reset.type = 'button';
+    reset.disabled = !fresh;
+    reset.setAttribute('aria-label', 'Reset ' + name + ' preference');
+    reset.addEventListener('click', () => void savePreference(key, kind, 'default'));
+    container.append(reset);
+  }
+  if (locked) container.append(node('span', 'policy-reason', 'Disabled for all agents'));
   return container;
 }
 
@@ -192,12 +258,16 @@ function renderCatalog() {
   const result = state.catalog;
   const list = el('catalog-list');
   const category = el('category-preference');
+  const current = result?.agent === (state.agent || null) ? result : null;
+  el('all-skills-preference').replaceChildren(aggregatePreference(current, 'all'));
   category.replaceChildren();
+  if (current?.categoryPreference?.category === state.category) {
+    category.append(aggregatePreference(current, 'category'));
+  }
   if (state.catalogLoading || !result) {
     list.replaceChildren(node('p', 'empty', state.catalogLoading ? 'Finding skills…' : 'Search to load the catalog.'));
     el('page-summary').textContent = '';
   } else {
-    if (result.categoryPreference) category.append(preference(result.categoryPreference, result.revision, true));
     if (result.items.length === 0) {
       list.replaceChildren(node('p', 'empty', 'No skills match this search.'));
       el('page-summary').textContent = '';
@@ -212,7 +282,7 @@ function renderCatalog() {
           node('span', 'skill-meta', categoryName(skill.category) + ' · ' + skill.difficulty),
         );
         choice.append(checkbox(skill, 'catalog'), details);
-        row.append(choice, preference(skill, result.revision, false));
+        row.append(choice, preference(skill, result.revision));
         return row;
       }));
       const start = (result.page - 1) * result.pageSize + 1;
@@ -362,14 +432,15 @@ async function loadLibrary(announceError = true) {
   }
 }
 
-async function savePreference(key, isCategory, status) {
+async function savePreference(key, kind, status) {
   if (state.busy) return;
   notice();
-  const categoryRoute = isCategory ? '/api/category-preferences' : '/api/preferences';
-  const target = isCategory ? { category: key } : { path: key };
+  const route = kind === 'all' ? '/api/all-skills-preferences' :
+    kind === 'category' ? '/api/category-preferences' : '/api/preferences';
+  const target = kind === 'category' ? { category: key } : kind === 'skill' ? { path: key } : {};
   setBusy(true);
   try {
-    const result = await api(categoryRoute, {
+    const result = await api(route, {
       ...target, status, agent: editingProject() ? undefined : state.agent, expectedRevision: state.revision,
     });
     rememberRevision(result.revision);
@@ -378,8 +449,9 @@ async function savePreference(key, isCategory, status) {
   } finally {
     await Promise.all([loadCatalog(), loadWorkspace(state.directory)]);
     setBusy(false);
-    const button = [...document.querySelectorAll('[data-policy]')].find(control => control.dataset.policy === key);
-    (button?.disabled === false ? button : el('catalog-category')).focus({ preventScroll: true });
+    const controls = [...document.querySelectorAll('[data-policy]')].filter(control => control.dataset.policy === key && !control.disabled);
+    const button = controls.find(control => control.dataset.action === status) ?? controls[0];
+    (button ?? el('catalog-category')).focus({ preventScroll: true });
   }
 }
 

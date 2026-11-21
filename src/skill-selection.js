@@ -86,6 +86,11 @@ function categoryFamily(category) {
   return category.split('/', 1)[0];
 }
 
+function skillCategory(skillPath) {
+  const slash = skillPath.lastIndexOf('/');
+  return slash === -1 ? '' : skillPath.slice(0, slash);
+}
+
 function isCategoryKey(value) {
   return typeof value === 'string' && /^[a-z][a-z0-9-]*(?:\/[a-z][a-z0-9-]*)*$/u.test(value);
 }
@@ -130,7 +135,10 @@ async function stateDirectory(project, create) {
 }
 
 function blankState() {
-  return { revision: 0, overrides: {}, agentOverrides: {}, categoryOverrides: {}, agentCategoryOverrides: {} };
+  return {
+    revision: 0, overrides: {}, agentOverrides: {}, categoryOverrides: {}, agentCategoryOverrides: {},
+    allSkillsStatus: 'default', agentAllSkillsStatus: {},
+  };
 }
 
 function validOverrides(value, validKey) {
@@ -143,6 +151,17 @@ function validAgentOverrides(value, validKey) {
   return value && typeof value === 'object' && !Array.isArray(value) &&
     Object.entries(value).every(([agent, overrides]) =>
       SELECTION_AGENTS.includes(agent) && validOverrides(overrides, validKey));
+}
+
+function preserveLegacyCategoryDenials(files, categories) {
+  for (const [category, status] of Object.entries(categories)) {
+    if (status === 'enabled' && categories[categoryFamily(category)] === 'disabled') delete categories[category];
+  }
+  for (const [skill, status] of Object.entries(files)) {
+    if (status !== 'enabled') continue;
+    const category = skillCategory(skill);
+    if (categories[category] === 'disabled' || categories[categoryFamily(category)] === 'disabled') delete files[skill];
+  }
 }
 
 async function readState(directory) {
@@ -172,14 +191,25 @@ async function readState(directory) {
     if (state?.revision !== latest.revision) {
       throw issue('Project skill settings contain an invalid preference revision.');
     }
-    const { categoryOverrides = {}, agentCategoryOverrides = {} } = state;
+    const {
+      categoryOverrides = {}, agentCategoryOverrides = {}, allSkillsStatus = 'default', agentAllSkillsStatus = {},
+    } = state;
     if (!validOverrides(state.overrides, isSkillPath) ||
         !validAgentOverrides(state.agentOverrides, isSkillPath) ||
         !validOverrides(categoryOverrides, isCategoryKey) ||
-        !validAgentOverrides(agentCategoryOverrides, isCategoryKey)) {
+        !validAgentOverrides(agentCategoryOverrides, isCategoryKey) || !states.includes(allSkillsStatus) ||
+        !validOverrides(agentAllSkillsStatus, agent => SELECTION_AGENTS.includes(agent))) {
       throw issue('Project skill settings contain an invalid preference revision.');
     }
-    return { ...state, categoryOverrides, agentCategoryOverrides };
+    if (!Object.hasOwn(state, 'allSkillsStatus') && !Object.hasOwn(state, 'agentAllSkillsStatus')) {
+      // Older snapshots made same-scope category denies absolute. A new explicit
+      // exception can lift one, but stale, previously blocked allows stay inactive.
+      preserveLegacyCategoryDenials(state.overrides, categoryOverrides);
+      for (const agent of SELECTION_AGENTS) {
+        preserveLegacyCategoryDenials(state.agentOverrides[agent] ?? {}, agentCategoryOverrides[agent] ?? {});
+      }
+    }
+    return { ...state, categoryOverrides, agentCategoryOverrides, allSkillsStatus, agentAllSkillsStatus };
   }
 }
 
@@ -188,40 +218,33 @@ export async function loadSkillSelectionState({ project } = {}) {
 }
 
 const defaultEligibility = Object.freeze({ status: 'default', scope: null, type: null });
+const specificity = { all: 1, category: 2, skill: 3 };
 
-function categoryWithStatus(overrides, category, family, status) {
-  if (overrides?.[category] === status) return category;
-  if (family !== category && overrides?.[family] === status) return family;
-  return null;
+function describeScopeEligibility(scope, skill, categories, category, family, baseline) {
+  if (skill) return { status: skill, scope, type: 'skill' };
+  const rule = categories?.[category] ? category : family;
+  if (categories?.[rule]) {
+    return { status: categories[rule], scope, type: 'category', category: rule };
+  }
+  if (baseline && baseline !== 'default') return { status: baseline, scope, type: 'all' };
+  return defaultEligibility;
 }
 
 function describeEligibility(state, category, skillPath, agent) {
   const family = categoryFamily(category);
-  const agentCategories = agent && state.agentCategoryOverrides?.[agent];
-  const projectCategories = state.categoryOverrides;
-  const agentSkill = skillPath && agent && state.agentOverrides?.[agent]?.[skillPath];
-  const projectSkill = skillPath && state.overrides?.[skillPath];
+  const project = describeScopeEligibility('project', skillPath && state.overrides?.[skillPath],
+    state.categoryOverrides, category, family, state.allSkillsStatus);
+  if (project.status === 'disabled' || !agent) return project;
 
-  const projectBlock = categoryWithStatus(projectCategories, category, family, 'disabled');
-  if (projectBlock) return { status: 'disabled', scope: 'project', type: 'category', category: projectBlock };
-  if (projectSkill === 'disabled') return { status: 'disabled', scope: 'project', type: 'skill' };
-  const agentBlock = categoryWithStatus(agentCategories, category, family, 'disabled');
-  if (agentBlock) return { status: 'disabled', scope: 'agent', type: 'category', category: agentBlock };
-  if (agentSkill === 'disabled') return { status: 'disabled', scope: 'agent', type: 'skill' };
-
-  if (agentSkill === 'enabled') return { status: 'enabled', scope: 'agent', type: 'skill' };
-  if (projectSkill === 'enabled') return { status: 'enabled', scope: 'project', type: 'skill' };
-  const agentAllow = categoryWithStatus(agentCategories, category, family, 'enabled');
-  if (agentAllow) return { status: 'enabled', scope: 'agent', type: 'category', category: agentAllow };
-  const projectAllow = categoryWithStatus(projectCategories, category, family, 'enabled');
-  if (projectAllow) return { status: 'enabled', scope: 'project', type: 'category', category: projectAllow };
-  return defaultEligibility;
+  const agentRule = describeScopeEligibility('agent', skillPath && state.agentOverrides?.[agent]?.[skillPath],
+    state.agentCategoryOverrides?.[agent], category, family, state.agentAllSkillsStatus?.[agent]);
+  if (agentRule.status === 'disabled' || (agentRule.status === 'enabled' &&
+      (project.status === 'default' || specificity[agentRule.type] >= specificity[project.type]))) return agentRule;
+  return project;
 }
 
 export function describeSkillEligibility(state, skillPath, agent) {
-  const slash = skillPath.lastIndexOf('/');
-  const category = slash === -1 ? '' : skillPath.slice(0, slash);
-  return describeEligibility(state, category, skillPath, agent);
+  return describeEligibility(state, skillCategory(skillPath), skillPath, agent);
 }
 
 export function describeCategoryEligibility(state, category, agent) {
@@ -269,20 +292,75 @@ export async function setSkillCategoryState({ category, ...options } = {}) {
   return setPreference({ ...options, key: category }, true);
 }
 
+function clearDescendantOverrides(overrides, category) {
+  const prefix = category + '/';
+  let changed = false;
+  for (const name of Object.keys(overrides)) {
+    if (!name.startsWith(prefix)) continue;
+    delete overrides[name];
+    changed = true;
+  }
+  return changed;
+}
+
+function writeScopeOverrides(state, agent, files, categories) {
+  if (!agent) {
+    state.overrides = files;
+    state.categoryOverrides = categories;
+    return;
+  }
+  if (Object.keys(files).length) state.agentOverrides[agent] = files;
+  else delete state.agentOverrides[agent];
+  if (Object.keys(categories).length) state.agentCategoryOverrides[agent] = categories;
+  else delete state.agentCategoryOverrides[agent];
+}
+
+export async function setAllSkillsState({ project, agent, status, expectedRevision } = {}) {
+  validateAgent(agent);
+  if (status !== 'enabled' && status !== 'disabled') throw issue('Choose enabled or disabled for all skills.');
+  return updatePreferenceState(project, expectedRevision, state => {
+    const previous = agent ? state.agentAllSkillsStatus[agent] : state.allSkillsStatus;
+    const files = agent ? state.agentOverrides[agent] : state.overrides;
+    const categories = agent ? state.agentCategoryOverrides[agent] : state.categoryOverrides;
+    if (previous === status && !Object.keys(files ?? {}).length && !Object.keys(categories ?? {}).length) return false;
+
+    if (agent) state.agentAllSkillsStatus[agent] = status;
+    else state.allSkillsStatus = status;
+    writeScopeOverrides(state, agent, {}, {});
+    return true;
+  });
+}
+
 async function setPreference({ project, agent, key, status, expectedRevision }, isCategory) {
   validateAgent(agent);
   if (!states.includes(status)) throw issue('Choose enabled, disabled, or default.');
-  if (expectedRevision !== undefined && (!Number.isSafeInteger(expectedRevision) || expectedRevision < 0)) {
-    throw issue('The expected revision must be a nonnegative integer.');
-  }
   if (isCategory && (!isCategoryKey(key) || !(await loadCatalog()).categoryKeys.has(key))) {
     throw issue('Use an exact catalog category path or family.', 'UNKNOWN_CATEGORY', 404);
   }
   if (!isCategory && (!isSkillPath(key) || !(await loadCatalog()).byPath.has(key))) {
     throw issue('Use the exact relative path of a catalog skill.', 'UNKNOWN_SKILL', 404);
   }
-  const projectKey = isCategory ? 'categoryOverrides' : 'overrides';
-  const agentKey = isCategory ? 'agentCategoryOverrides' : 'agentOverrides';
+  return updatePreferenceState(project, expectedRevision, state => {
+    const files = agent ? state.agentOverrides[agent] ?? {} : state.overrides;
+    const categories = agent ? state.agentCategoryOverrides[agent] ?? {} : state.categoryOverrides;
+    const overrides = isCategory ? categories : files;
+    const previous = overrides[key] ?? 'default';
+    const bulkCategoryChange = isCategory && status !== 'default';
+    const clearedFiles = bulkCategoryChange && clearDescendantOverrides(files, key);
+    const clearedCategories = bulkCategoryChange && clearDescendantOverrides(categories, key);
+    if (status === previous && !clearedFiles && !clearedCategories) return false;
+
+    if (status === 'default') delete overrides[key];
+    else overrides[key] = status;
+    writeScopeOverrides(state, agent, files, categories);
+    return true;
+  });
+}
+
+async function updatePreferenceState(project, expectedRevision, apply) {
+  if (expectedRevision !== undefined && (!Number.isSafeInteger(expectedRevision) || expectedRevision < 0)) {
+    throw issue('The expected revision must be a nonnegative integer.');
+  }
   const root = await resolveSkillProject(project);
   let directory = await stateDirectory(root, false);
   while (true) {
@@ -290,14 +368,7 @@ async function setPreference({ project, agent, key, status, expectedRevision }, 
     if (expectedRevision !== undefined && state.revision !== expectedRevision) {
       throw issue('Project skill settings changed. Reload and try again.', 'STALE_REVISION', 409);
     }
-    const overrides = agent ? (state[agentKey][agent] ?? {}) : state[projectKey];
-    const previous = overrides[key] ?? 'default';
-    if (status === previous) return state;
-
-    if (status === 'default') delete overrides[key];
-    else overrides[key] = status;
-    if (agent && Object.keys(overrides).length) state[agentKey][agent] = overrides;
-    else if (agent) delete state[agentKey][agent];
+    if (!apply(state)) return state;
     state.revision += 1;
 
     try {

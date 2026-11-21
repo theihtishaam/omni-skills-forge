@@ -11,7 +11,8 @@ export { OmniDoctor } from './doctor.js';
 export {
   describeCategoryEligibility, describeSkillEligibility, exportSkillContext,
   getCategoryEligibility, getSkillEligibility, loadSkillSelectionCatalog, loadSkillSelectionState,
-  readCatalogSkill, recommendWorkspaceSkills, selectSkills, setSkillCategoryState, setSkillSelectionState,
+  readCatalogSkill, recommendWorkspaceSkills, selectSkills, setAllSkillsState,
+  setSkillCategoryState, setSkillSelectionState,
 } from './skill-selection.js';
 export { detectWorkspaceProfile } from './workspace-profile.js';
 export { listSkillDeliveries } from './skill-delivery.js';

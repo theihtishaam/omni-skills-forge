@@ -201,29 +201,29 @@ test('dashboard filters catalog pages and exposes inherited category exclusions 
   assert.equal(disabled.total, disabled.counts.category);
   assert.equal(disabled.counts.categoryDisabled, disabled.counts.category);
   assert.ok(disabled.counts.disabled > disabled.counts.categoryDisabled);
-  assert.equal(disabled.categoryPreference.agentStatus, 'enabled');
-  assert.equal(disabled.categoryPreference.projectBlock, null);
-  assert.equal(disabled.categoryPreference.agentBlock.category, 'web-dev');
-  assert.equal(disabled.categoryPreference.agentBlock.scope, 'agent');
-  assert.ok(disabled.items.every(skill => skill.eligibility === 'disabled' && skill.agentBlock.category === 'web-dev'));
+  assert.equal(disabled.categoryPreference.agentStatus, 'default');
+  assert.equal(disabled.categoryPreference.projectEffective.status, 'default');
+  assert.equal(disabled.categoryPreference.effective.category, 'web-dev');
+  assert.equal(disabled.categoryPreference.effective.scope, 'agent');
+  assert.ok(disabled.items.every(skill => skill.eligibility === 'disabled' && skill.effective.category === 'web-dev'));
 
   const other = await getCatalog({ agent: 'cursor', filter: 'disabled' });
   assert.equal(other.total, 0);
-  assert.equal(other.categoryPreference.agentBlock, null);
+  assert.equal(other.categoryPreference.effective.status, 'default');
   const recommendations = await (await post(url, '/api/workspace', { directory: '.', agent: 'codex' })).json();
   assert.ok(recommendations.suggestions.every(skill => !skill.category.startsWith('web-dev/')));
 
   assert.equal((await mutate('web-dev', 'disabled', 2)).status, 200);
   const inherited = await getCatalog({ agent: 'cursor', filter: 'disabled' });
-  assert.equal(inherited.categoryPreference.projectBlock.category, 'web-dev');
-  assert.equal(inherited.categoryPreference.agentBlock.scope, 'project');
+  assert.equal(inherited.categoryPreference.projectEffective.category, 'web-dev');
+  assert.equal(inherited.categoryPreference.effective.scope, 'project');
   assert.equal(inherited.counts.categoryDisabled, inherited.counts.category);
   assert.equal((await mutate('web-dev', 'default', 3)).status, 200);
   assert.equal((await mutate('web-dev', 'default', 4, 'codex')).status, 200);
   const reset = await getCatalog({ filter: 'eligible' });
   assert.equal(reset.total, reset.counts.category);
   assert.equal(reset.counts.categoryDisabled, 0);
-  assert.equal(reset.categoryPreference.eligibility, 'enabled');
+  assert.equal(reset.categoryPreference.eligibility, 'default');
 });
 
 test('dashboard previews and downloads a composed skill, then saves and changes its status explicitly', async t => {
@@ -296,4 +296,61 @@ test('dashboard makes a skill from a task or picked catalog sources in one reque
   assert.deepEqual(combined.sources.map(skill => skill.path), sourcePaths);
   assert.match(combined.portableMarkdown, /react-form-handling-advanced-intermediate.md/u);
   assert.equal((await (await fetch(url + '/api/workspace-skills')).json()).recipes.length, 2);
+});
+
+test('bulk controls count the whole scope, preserve cross-agent policy and replace narrower overrides', async t => {
+  const { url, projectRoot } = await dashboardFixture(t);
+  const file = 'web-dev/react/react-accessibility-a11y-advanced-intermediate.md';
+  const directory = path.join(projectRoot, '.omni-skills-forge');
+  await mkdir(directory);
+  await writeFile(path.join(directory, 'preferences-1.json'), JSON.stringify({
+    revision: 1, overrides: { [file]: 'enabled' }, agentOverrides: {},
+    categoryOverrides: { 'web-dev/react': 'disabled' }, agentCategoryOverrides: {},
+  }));
+  const browse = async (query = {}) => {
+    const response = await fetch(url + '/api/catalog?' + new URLSearchParams({ category: 'web-dev/react', ...query }));
+    assert.equal(response.status, 200);
+    return response.json();
+  };
+  const legacy = await browse({ filter: 'eligible' });
+  assert.equal(legacy.total, 0, 'loading past preferences must not turn old blocked allows on');
+
+  const change = async (route, status, expectedRevision, fields = {}) => {
+    const response = await post(url, '/api/' + route, { status, expectedRevision, ...fields });
+    assert.equal(response.status, 200);
+    return (await response.json()).revision;
+  };
+  const bulk = 'all-skills-preferences';
+  let revision = await change(bulk, 'disabled', legacy.revision);
+  const off = await browse({ query: 'keyboard', agent: 'codex' });
+  assert.equal(off.counts.disabled, off.counts.catalog);
+  assert.equal(off.counts.projectDisabled, off.counts.catalog);
+  assert.equal(off.allSkillsPreference.projectStatus, 'disabled');
+  revision = await change('preferences', 'enabled', revision, { path: file, agent: 'codex' });
+  assert.equal((await browse({ filter: 'eligible', agent: 'codex' })).total, 0);
+  revision = await change('preferences', 'enabled', revision, { path: file });
+  const one = await browse({ filter: 'eligible', agent: 'codex' });
+  assert.equal(one.counts.catalog - one.counts.disabled, 1);
+  assert.equal(one.items[0].path, file);
+  assert.equal(one.items[0].projectEffective.status, 'enabled');
+  revision = await change('category-preferences', 'enabled', revision, { category: 'web-dev/react' });
+  const categoryOn = await browse({ filter: 'eligible' });
+  assert.equal(categoryOn.total, categoryOn.counts.category);
+  assert.equal(categoryOn.counts.catalog - categoryOn.counts.disabled, categoryOn.total);
+  revision = await change('category-preferences', 'disabled', revision, { category: 'web-dev/react' });
+  assert.equal((await browse({ filter: 'eligible' })).total, 0);
+  revision = await change(bulk, 'enabled', revision);
+  assert.equal((await browse()).counts.disabled, 0);
+  revision = await change(bulk, 'disabled', revision, { agent: 'codex' });
+  assert.equal((await browse({ agent: 'codex' })).total, categoryOn.total, 'disabled catalog rows remain visible');
+  assert.equal((await browse({ agent: 'cursor' })).counts.disabled, 0);
+  const projected = await browse({ agent: 'codex', filter: 'eligible' });
+  assert.equal(projected.total, 0);
+  assert.equal(projected.counts.projectDisabled, 0);
+  revision = await change('preferences', 'enabled', revision, { path: file, agent: 'codex' });
+  const persisted = await browse({ agent: 'codex', filter: 'eligible', query: 'accessibility' });
+  assert.equal(persisted.counts.catalog - persisted.counts.disabled, 1);
+  assert.equal(persisted.allSkillsPreference.agentStatus, 'disabled');
+  assert.equal(persisted.revision, revision);
+  assert.equal((await post(url, '/api/' + bulk, { status: 'enabled', expectedRevision: revision - 1 })).status, 409);
 });

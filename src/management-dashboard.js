@@ -17,6 +17,7 @@ import {
   resolveSkillProject,
   SELECTION_AGENTS,
   selectSkills,
+  setAllSkillsState,
   setSkillCategoryState,
   setSkillSelectionState,
 } from './skill-selection.js';
@@ -96,27 +97,19 @@ function parseAgent(agent) {
   return agent;
 }
 
-function disabledRule(rule) {
-  return rule?.status === 'disabled' ? rule : null;
-}
-
 function mapPreferences(state, key, agent, kind) {
   const isCategory = kind === 'category';
   const projectStatus = (isCategory ? state.categoryOverrides : state.overrides)[key] ?? 'default';
   const agentStatus = (isCategory ? state.agentCategoryOverrides : state.agentOverrides)[agent]?.[key] ?? 'default';
   const describe = isCategory ? describeCategoryEligibility : describeSkillEligibility;
   const effective = describe(state, key, agent);
-  const parent = key.includes('/') ? key.slice(0, key.lastIndexOf('/')) : null;
-  const projectBlock = parent ? disabledRule(describeCategoryEligibility(state, parent)) : null;
-  const agentBlock = projectBlock ?? disabledRule(describe(state, key)) ??
-    (parent ? disabledRule(describeCategoryEligibility(state, parent, agent)) : null);
+  const projectEffective = agent ? describe(state, key) : effective;
   return {
     projectStatus,
     agentStatus,
     eligibility: effective.status,
     effective,
-    projectBlock,
-    agentBlock,
+    projectEffective,
   };
 }
 
@@ -139,17 +132,22 @@ function catalogPage(catalog, categoryKeys, state, parameters) {
   }
 
   let disabled = 0;
+  let projectDisabled = 0;
   let categoryTotal = 0;
   let categoryDisabled = 0;
+  let categoryProjectDisabled = 0;
   let total = 0;
   const items = [];
   const offset = (page - 1) * CATALOG_PAGE_SIZE;
   for (const { skill, searchable } of catalog) {
     const isDisabled = getSkillEligibility(state, skill.file, agent) === 'disabled';
+    const isProjectDisabled = isDisabled && (!agent || getSkillEligibility(state, skill.file) === 'disabled');
     if (isDisabled) disabled++;
+    if (isProjectDisabled) projectDisabled++;
     if (category && skill.category !== category && !skill.category.startsWith(category + '/')) continue;
     categoryTotal++;
     if (isDisabled) categoryDisabled++;
+    if (isProjectDisabled) categoryProjectDisabled++;
     if (filter === 'eligible' && isDisabled) continue;
     if (filter === 'disabled' && !isDisabled) continue;
     if (!terms.every(term => searchable.includes(term))) continue;
@@ -170,13 +168,20 @@ function catalogPage(catalog, categoryKeys, state, parameters) {
     pageSize: CATALOG_PAGE_SIZE,
     total,
     items,
+    agent: agent ?? null,
+    allSkillsPreference: {
+      projectStatus: state.allSkillsStatus,
+      agentStatus: state.agentAllSkillsStatus[agent] ?? 'default',
+    },
     categoryPreference: category ? { category, ...mapPreferences(state, category, agent, 'category') } : null,
     revision: state.revision,
     counts: {
       catalog: catalog.length,
       disabled,
+      projectDisabled,
       category: categoryTotal,
       categoryDisabled,
+      categoryProjectDisabled,
     },
   };
 }
@@ -368,16 +373,17 @@ export async function startManagementDashboard({ projectRoot = process.cwd(), po
         });
         return;
       }
-      if (request.method === 'POST' && (route === '/api/preferences' || route === '/api/category-preferences')) {
+      if (request.method === 'POST' && ['/api/preferences', '/api/category-preferences', '/api/all-skills-preferences'].includes(route)) {
         const { path: skillPath, category, status, agent: rawAgent, expectedRevision } = await readJson(request);
         const agent = parseAgent(rawAgent);
         if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 0) {
           throw badRequest('A current policy revision is required.');
         }
         const options = { project, agent, status, expectedRevision };
-        const state = route === '/api/category-preferences'
-          ? await setSkillCategoryState({ ...options, category })
-          : await setSkillSelectionState({ ...options, path: skillPath });
+        let state;
+        if (route === '/api/all-skills-preferences') state = await setAllSkillsState(options);
+        else if (route === '/api/category-preferences') state = await setSkillCategoryState({ ...options, category });
+        else state = await setSkillSelectionState({ ...options, path: skillPath });
         json(response, 200, { revision: state.revision });
         return;
       }

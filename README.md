@@ -14,10 +14,12 @@ osf dashboard
 ```
 
 1. **Find a skill.** Start with the workspace suggestions, or search the catalog and choose a category. There are 28 categories across six families.
-2. **Choose what to use.** Switch individual skills or a whole category on or off. The project setting applies to everyone working there. Choose an agent for a personal override. A disabled project category stays off for every agent.
+2. **Choose what to use.** Click **All skills** to switch the whole catalog on or off. Each category has its own switch, and every skill row has one too. To use just one skill, turn **All skills** off and then turn that skill on. Choose a project or agent before making the change.
 3. **Make one skill.** Check the skills you want to merge, or type what you need and let Omni pick relevant sources. Click **Make skill**. The saved result belongs to this workspace.
 
-![Omni showing workspace suggestions, a category filter and individual skill switches](https://raw.githubusercontent.com/theihtishaam/omni-skills-forge/v2.3.1/assets/skills-dashboard.png)
+![Workspace suggestions above the catalog, with switches for all skills, a category and individual skill files](https://raw.githubusercontent.com/theihtishaam/omni-skills-forge/v2.3.1/assets/skills-dashboard.png)
+
+In the sample workspace, switching everything off left **0** eligible files. Enabling one file brought that to **1**. Enabling the React category made its **2,401** files eligible, and switching the whole catalog on restored **50,009**. Only task matches are sent to the agent.
 
 ## Ask your agent
 
