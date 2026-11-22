@@ -8,7 +8,7 @@ import {
   setAllSkillsState, setSkillCategoryState, setSkillSelectionState,
 } from '../src/skill-selection.js';
 
-const VERSION = '2.3.2';
+const VERSION = '2.4.0';
 
 async function loadInstaller() {
   const { OmniInstaller } = await import('../src/installer.js');

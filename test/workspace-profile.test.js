@@ -150,3 +150,16 @@ test('fixed Go, Rust, and .NET manifests map to real catalog recommendations by 
   ]);
   assert.deepEqual(response.suggestions.map(skill => skill.category), ['backend/csharp', 'backend/go', 'backend/rust']);
 });
+
+test('document names suggest eligible everyday skills only in their lane', async t => {
+  const project=await fixture(t);
+  await createReactManifest(project);
+  await writeFile(path.join(project,'meeting-notes.md'),'Private note contents');
+  const options={project,agent:'codex',lane:'work'};
+  const {suggestions}=await recommendWorkspaceSkills(options);
+  assert.deepEqual(suggestions.map(skill=>skill.path),['work/communication/meeting-actions.md']);
+  assert.match(suggestions[0].reason,/meeting-notes.md/);
+  assert.ok(!(await recommendWorkspaceSkills({...options,lane:'coding'})).suggestions.some(skill=>skill.path.startsWith('work/')));
+  await setSkillSelectionState({project,agent:'codex',path:suggestions[0].path,status:'disabled'});
+  assert.deepEqual((await recommendWorkspaceSkills(options)).suggestions,[]);
+});

@@ -1,7 +1,7 @@
 {
   "name": "omni-skills-forge",
-  "version": "2.3.2",
-  "description": "50,009 Markdown skill files for coding agents across 28 categories. Find relevant skills by task and combine selected files into a reusable workspace skill.",
+  "version": "2.4.0",
+  "description": "50,012 Markdown skill files across 30 categories for coding and everyday project work. Find relevant skills by task and combine selected files into a reusable workspace skill.",
   "main": "src/index.js",
   "bin": {
     "omni-skills-forge": "bin/cli.js",
@@ -28,6 +28,8 @@
     "assets/*.svg",
     "assets/omni-collection-cover.webp",
     "assets/skills-dashboard.png",
+    "assets/first-open.png",
+    "assets/everyday-work.webp",
     "assets/make-a-skill.png",
     "assets/agent-skill-flow.png",
     "assets/workspace-comparison.png",

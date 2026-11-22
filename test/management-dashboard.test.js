@@ -173,8 +173,8 @@ test('dashboard filters catalog pages and exposes inherited category exclusions 
   const { url, projectRoot } = await dashboardFixture(t);
   await writeFile(path.join(projectRoot, 'package.json'), '{"dependencies":{"react":"^19.0.0"}}');
   const project = await (await fetch(url + '/api/project')).json();
-  assert.equal(project.categoryGroups.length, 6);
-  assert.equal(project.categoryGroups.flatMap(group => group.categories).length, 28);
+  assert.equal(project.categoryGroups.length, 7);
+  assert.equal(project.categoryGroups.flatMap(group => group.categories).length, 30);
   assert.ok(project.categoryGroups.find(group => group.family === 'web-dev').categories.includes('web-dev/react'));
 
   const getCatalog = async (args = {}) => {
@@ -353,4 +353,23 @@ test('bulk controls count the whole scope, preserve cross-agent policy and repla
   assert.equal(persisted.allSkillsPreference.agentStatus, 'disabled');
   assert.equal(persisted.revision, revision);
   assert.equal((await post(url, '/api/' + bulk, { status: 'enabled', expectedRevision: revision - 1 })).status, 409);
+});
+
+test('welcome is claimed once across servers and the two collections partition the catalog', async t => {
+  const root = await mkdtemp(path.join(tmpdir(), 'forge-welcome-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const open = async () => {
+    const server = await startManagementDashboard({ projectRoot:root, preferenceDirectory:path.join(root,'prefs') });
+    t.after(() => server.close());
+    return server.url;
+  };
+  const a = await open(), b = await open();
+  const claims = await Promise.all([a,b].map(async url => (await (await post(url,'/api/welcome/claim',{})).json()).first));
+  assert.deepEqual(claims.sort(),[false,true]);
+  const read = async suffix => (await fetch(a+'/api/catalog'+suffix)).json();
+  const [all,coding,work] = await Promise.all(['','?lane=coding','?lane=work'].map(read));
+  assert.equal(work.total,3); assert.equal(work.total + coding.total,all.total);
+  assert.ok(work.items.every(item => item.category.startsWith('work/')));
+  assert.equal((await fetch(a+'/api/catalog?lane=unknown')).status,400);
+  assert.equal((await fetch(a+'/collection.webp')).headers.get('content-type'),'image/webp');
 });

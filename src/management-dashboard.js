@@ -1,6 +1,7 @@
-import { readFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import path from 'node:path';
+import { homedir } from 'node:os';
 import { exactworkRecommendation } from './exactwork-recommendation.js';
 import {
   DEFAULT_SELECTION_MAX_SKILLS,
@@ -36,13 +37,15 @@ const RECENT_DELIVERIES = 5;
 const WORKSPACE_SKILL_FILE = /^workspace\/(.+)\.md$/u;
 const BROWSE_FILTERS = new Set(['all', 'eligible', 'disabled']);
 const UI_ASSETS = [
+  ['/collection.webp', '../../assets/omni-collection-cover.webp', 'image/webp'],
+  ['/everyday.webp', '../../assets/everyday-work.webp', 'image/webp'],
   ['/', 'index.html', 'text/html; charset=utf-8'],
   ['/dashboard.css', 'dashboard.css', 'text/css; charset=utf-8'],
   ['/dashboard.js', 'dashboard.js', 'text/javascript; charset=utf-8'],
 ];
 const SECURITY_HEADERS = {
   'Cache-Control': 'no-store',
-  'Content-Security-Policy': "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+  'Content-Security-Policy': "default-src 'none'; img-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
   'Cross-Origin-Resource-Policy': 'same-origin',
   'Referrer-Policy': 'no-referrer',
   'X-Content-Type-Options': 'nosniff',
@@ -121,6 +124,8 @@ function catalogPage(catalog, categoryKeys, state, parameters) {
   const agent = parseAgent(parameters.get('agent'));
   const filter = parameters.get('filter') ?? 'all';
   if (!BROWSE_FILTERS.has(filter)) throw badRequest('Choose a supported catalog filter.');
+  const lane = parameters.get('lane') || '';
+  if (!['', 'coding', 'work'].includes(lane)) throw badRequest('Choose a recognized collection.');
   const category = parameters.get('category') ?? '';
   if (category && !categoryKeys.has(category)) throw badRequest('Choose a recognized catalog category.', 404);
   const rawQuery = parameters.get('query') ?? '';
@@ -144,6 +149,7 @@ function catalogPage(catalog, categoryKeys, state, parameters) {
     const isProjectDisabled = isDisabled && (!agent || getSkillEligibility(state, skill.file) === 'disabled');
     if (isDisabled) disabled++;
     if (isProjectDisabled) projectDisabled++;
+    if (lane && ((lane === 'work') !== skill.category.startsWith('work/'))) continue;
     if (category && skill.category !== category && !skill.category.startsWith(category + '/')) continue;
     categoryTotal++;
     if (isDisabled) categoryDisabled++;
@@ -186,7 +192,7 @@ function catalogPage(catalog, categoryKeys, state, parameters) {
   };
 }
 
-export async function startManagementDashboard({ projectRoot = process.cwd(), port = 0 } = {}) {
+export async function startManagementDashboard({ projectRoot = process.cwd(), port = 0, preferenceDirectory = process.env.OSF_PREFERENCES_HOME || path.join(homedir(), '.omni-skills-forge') } = {}) {
   if (!Number.isInteger(port) || port < 0 || port > 65535) {
     throw new Error('Dashboard port must be an integer from 0 to 65535.');
   }
@@ -208,8 +214,13 @@ export async function startManagementDashboard({ projectRoot = process.cwd(), po
   }));
   const skillsByPath = new Map(skills.map(skill => [skill.file, skill]));
   const categoryKeys = new Set([...families, ...categories]);
+  const familySizes = new Map();
+  for (const skill of skills) {
+    const family = skill.category.split('/')[0];
+    familySizes.set(family, (familySizes.get(family) || 0) + 1);
+  }
   const categoryGroups = families.map(family => ({
-    family,
+    family, count: familySizes.get(family) || 0,
     categories: categories.filter(category => category.startsWith(family + '/')),
   }));
 
@@ -231,6 +242,18 @@ export async function startManagementDashboard({ projectRoot = process.cwd(), po
       const target = new URL(request.url, url);
       if (target.origin !== url) throw badRequest('Open the dashboard through its loopback URL.', 403);
       const route = target.pathname;
+      if (request.method === 'POST' && route === '/api/welcome/claim') {
+        await readJson(request);
+        await mkdir(preferenceDirectory, {recursive:true, mode:0o700});
+        try {
+          await writeFile(path.join(preferenceDirectory, 'welcome-seen'), '', {flag:'wx', mode:0o600});
+          json(response, 200, {first:true});
+        } catch (error) {
+          if (error.code !== 'EEXIST') throw error;
+          json(response, 200, {first:false});
+        }
+        return;
+      }
       if (request.method === 'GET') {
         const asset = assets.get(route);
         if (asset) {
@@ -334,9 +357,10 @@ export async function startManagementDashboard({ projectRoot = process.cwd(), po
         return;
       }
       if (request.method === 'POST' && route === '/api/workspace') {
-        const { directory, agent: rawAgent } = await readJson(request);
+        const { directory, agent: rawAgent, lane = '' } = await readJson(request);
+        if (!['','coding','work'].includes(lane)) throw badRequest('Choose a recognized collection.');
         const agent = parseAgent(rawAgent);
-        const options = { project, directory, agent, maxSkills: WORKSPACE_SUGGESTIONS };
+        const options = { project, directory, agent, lane, maxSkills: WORKSPACE_SUGGESTIONS };
         let suggestions = await recommendWorkspaceSkills(options);
         let state = await loadSkillSelectionState({ project });
         if (suggestions.revision !== state.revision) {

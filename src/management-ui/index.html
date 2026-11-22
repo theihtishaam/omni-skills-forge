@@ -12,7 +12,7 @@
   <header class="header">
     <div class="header-inner">
       <a class="brand" href="/"><span class="mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>Omni Skills Forge</a>
-      <a href="https://github.com/theihtishaam/omni-skills-forge" target="_blank" rel="noopener noreferrer">Repository <span aria-hidden="true">↗</span></a>
+      <nav class="head-links"><button class="guide-link" type="button" id="open-guide">Quick guide</button><a href="https://github.com/theihtishaam/omni-skills-forge" target="_blank" rel="noopener noreferrer">GitHub <span aria-hidden="true">↗</span></a></nav>
     </div>
   </header>
 
@@ -34,6 +34,16 @@
         <select id="agent" disabled><option value="">Project default</option></select>
       </div>
     </div>
+
+    <section class="collections" aria-labelledby="collection-heading">
+      <div class="collection-heading"><h2 id="collection-heading">Browse collections</h2><button type="button" id="show-all" aria-pressed="true">Show all skills</button></div>
+      <div class="lanes">
+        <button type="button" class="lane coding" id="lane-coding" aria-pressed="false" disabled><strong>Coding &amp; engineering</strong><span>Build, test and run software</span><small id="count-coding"></small></button>
+        <button type="button" class="lane everyday" id="lane-work" aria-pressed="false" disabled><strong>Everyday work</strong><span>Meeting notes, decisions and updates</span><small id="count-work"></small></button>
+      </div>
+      <div id="family-picker" class="chips" aria-label="Skill families"></div>
+      <div id="topic-picker" class="chips topics" aria-label="Topics in the selected family"></div>
+    </section>
 
     <section class="suggestion-section" aria-labelledby="suggestion-heading">
       <h2 id="suggestion-heading">Suggested for this workspace</h2>
@@ -75,6 +85,7 @@
           <label for="catalog-category" class="visually-hidden">Category</label>
           <select id="catalog-category" disabled><option value="">All categories</option></select>
         </form>
+        <label class="availability">Show <select id="availability"><option value="all">All matching skills</option><option value="eligible">Enabled skills</option><option value="disabled">Disabled skills</option></select></label>
         <div class="policy">
           <div class="policy-controls">
             <div id="all-skills-preference"></div>
@@ -106,5 +117,15 @@
       <a href="https://github.com/theihtishaam" target="_blank" rel="noopener noreferrer">Follow Ihtisham on GitHub <span aria-hidden="true">↗</span></a>
     </footer>
   </main>
+  <dialog id="welcome" aria-labelledby="welcome-heading">
+    <div class="welcome-cover"><img src="/collection.webp" alt="Omni Skills Forge collection of 50,000+ agent skills"><button type="button" id="close-guide" aria-label="Close welcome guide">×</button></div>
+    <div class="welcome-copy"><h2 id="welcome-heading">Welcome to Omni Skills Forge</h2>
+      <p>Choose the skills your agent can use in this workspace.</p>
+      <p class="welcome-by">Built by <a href="https://github.com/theihtishaam" target="_blank" rel="noopener noreferrer">@theihtishaam</a></p>
+      <div class="welcome-social"><a href="https://github.com/theihtishaam/omni-skills-forge" target="_blank" rel="noopener noreferrer">☆ Star the repository ↗</a><a href="https://github.com/theihtishaam" target="_blank" rel="noopener noreferrer">Follow on GitHub ↗</a></div>
+      <ol><li><b>Find your topic.</b> Open a collection or look at this workspace’s suggestions.</li><li><b>Set the scope.</b> Allow a whole category or a single skill for one agent or the project.</li><li><b>Make it yours.</b> Pick a few sources and describe the skill you want to save.</li></ol>
+      <div class="welcome-actions"><button class="primary" type="button" id="explore">Explore skills →</button><a href="https://github.com/theihtishaam/exactwork-skills" target="_blank" rel="noopener noreferrer">Explore ExactWork ↗</a></div>
+    </div>
+  </dialog>
 </body>
 </html>

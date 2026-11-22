@@ -658,12 +658,22 @@ export async function selectSkills({ project, directory, agent, query, tokenBudg
   return result;
 }
 
-export async function recommendWorkspaceSkills({ project, directory, agent, maxSkills } = {}) {
+export async function recommendWorkspaceSkills({ project, directory, agent, maxSkills, lane } = {}) {
   validateAgent(agent);
   const limit = parseLimit(maxSkills, DEFAULT_SELECTION_MAX_SKILLS, MAX_SELECTION_SKILLS, 'Maximum skills');
   const { state, workspace } = await selectionScope(project, directory);
   const result = { revision: state.revision, agent: agent ?? null, workspace, suggestions: [] };
-  if (!workspace.technologies.length) return result;
+  if (lane !== 'coding' && workspace.documents?.length) {
+    const catalog = await loadCatalog();
+    for (const {file,skill:path} of workspace.documents) {
+      const skill = catalog.byPath.get(path);
+      if (!skill || getSkillEligibility(state,path,agent) === 'disabled') continue;
+      result.suggestions.push({path,name:skill.name,category:skill.category,difficulty:skill.difficulty,
+        description:skill.description,reason:'Suggested because this folder contains '+file+'.'});
+      if (result.suggestions.length >= limit) return result;
+    }
+  }
+  if (lane === 'work' || !workspace.technologies.length) return result;
 
   const selections = new Map();
   for (const evidence of workspace.technologies) {

@@ -1,7 +1,7 @@
 {
   "version": "1.0.0",
-  "totalSkills": 50009,
-  "builtAt": "2026-04-12T15:27:03.028Z",
+  "totalSkills": 50012,
+  "builtAt": "2026-11-22T10:05:24.882Z",
   "categories": [
     "ai-ml/agents",
     "ai-ml/computer-vision",
@@ -30,7 +30,9 @@
     "web-dev/react",
     "web-dev/remix",
     "web-dev/svelte",
-    "web-dev/vue"
+    "web-dev/vue",
+    "work/communication",
+    "work/planning"
   ],
   "skills": [
     {
@@ -700197,6 +700199,51 @@
       ],
       "description": "vue vuex-migration troubleshooting at intermediate level",
       "file": "web-dev/vue/vue-vuex-migration-troubleshooting-intermediate.md"
+    },
+    {
+      "name": "meeting-actions",
+      "category": "work/communication",
+      "version": "1.0.0",
+      "difficulty": "beginner",
+      "tags": [
+        "meeting",
+        "notes",
+        "actions",
+        "minutes",
+        "owners"
+      ],
+      "description": "Turn meeting notes into agreed actions, owners, deadlines and open questions.",
+      "file": "work/communication/meeting-actions.md"
+    },
+    {
+      "name": "weekly-status-update",
+      "category": "work/communication",
+      "version": "1.0.0",
+      "difficulty": "beginner",
+      "tags": [
+        "weekly",
+        "status",
+        "update",
+        "stakeholder",
+        "progress"
+      ],
+      "description": "Write a weekly stakeholder update from completed work, blockers and next steps.",
+      "file": "work/communication/weekly-status-update.md"
+    },
+    {
+      "name": "decision-brief",
+      "category": "work/planning",
+      "version": "1.0.0",
+      "difficulty": "intermediate",
+      "tags": [
+        "decision",
+        "brief",
+        "options",
+        "tradeoffs",
+        "recommendation"
+      ],
+      "description": "Compare options in a short decision brief with evidence, trade-offs and a recommendation.",
+      "file": "work/planning/decision-brief.md"
     }
   ]
 }

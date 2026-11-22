@@ -150,11 +150,19 @@ async function detectAt(directory, displayDirectory) {
 
 export async function detectWorkspaceProfile(options = {}) {
   const focus = await resolveWorkspaceDirectory(options);
+  // Match only three ordinary filenames in the selected folder; their contents stay unread.
+  const documentSkills = [
+    ['meeting-notes.md','work/communication/meeting-actions.md'],
+    ['weekly-status.md','work/communication/weekly-status-update.md'],
+    ['decision-log.md','work/planning/decision-brief.md'],
+  ];
+  const documents = (await Promise.all(documentSkills.map(async ([file, skill]) =>
+    await inspectManifest(focus.focusRoot,file) ? {file,skill} : null))).filter(Boolean);
   for (let current = focus.focusRoot; ; current = path.dirname(current)) {
     const relative = path.relative(focus.projectRoot, current).split(path.sep).join('/') || '.';
     const technologies = await detectAt(current, relative);
     if (technologies.length || current === focus.projectRoot) {
-      return { directory: focus.directory, technologies };
+      return { directory: focus.directory, technologies, ...(documents.length ? {documents} : {}) };
     }
   }
 }

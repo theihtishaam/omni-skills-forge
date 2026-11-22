@@ -4,7 +4,7 @@ const agentLabels = {
   kilo: 'Kilo', opencode: 'OpenCode', windsurf: 'Windsurf', portable: 'Portable',
 };
 const labels = {
-  'ai-ml': 'AI & ML', 'web-dev': 'Web development', 'computer-vision': 'Computer vision',
+  'work': 'Everyday work', 'devops': 'DevOps', 'ai-ml': 'AI & ML', 'web-dev': 'Web development', 'computer-vision': 'Computer vision',
   cicd: 'CI/CD', csharp: 'C#', gcp: 'Google Cloud', aws: 'AWS', llm: 'LLMs', mlops: 'MLOps',
   nextjs: 'Next.js', nodejs: 'Node.js', nosql: 'NoSQL', rag: 'RAG', sql: 'SQL',
 };
@@ -28,7 +28,7 @@ const state = {
   picks: new Map(),
   query: '',
   category: '',
-  page: 1,
+  page: 1, lane: '', groups: [],
   busy: false,
   catalogRequest: 0,
   workspaceRequest: 0,
@@ -96,6 +96,7 @@ function updateControls() {
   el('agent').disabled = !state.ready || state.busy;
   el('catalog-category').disabled = !state.ready || state.busy;
   el('scope').disabled = state.busy;
+  for (const control of document.querySelectorAll('.collections button, #availability')) control.disabled = state.busy || !state.ready;
   el('scope-label').hidden = !state.agent;
   el('catalog-list').setAttribute('aria-busy', String(state.catalogLoading));
   el('suggested-list').setAttribute('aria-busy', String(state.workspaceLoading));
@@ -247,7 +248,10 @@ function renderSuggestions() {
     list.replaceChildren(...state.workspace.suggestions.map(skill => {
       const item = node('label', 'suggestion');
       item.title = skill.path;
-      item.append(checkbox(skill, 'suggested'), node('span', '', skillName(skill)));
+      const copy = node('span');
+      copy.append(node('strong', '', skillName(skill)));
+      if (skill.reason) copy.append(node('small','skill-meta',skill.reason));
+      item.append(checkbox(skill, 'suggested'), copy);
       return item;
     }));
   }
@@ -281,6 +285,9 @@ function renderCatalog() {
           node('span', 'skill-name', skillName(skill)),
           node('span', 'skill-meta', categoryName(skill.category) + ' · ' + skill.difficulty),
         );
+        if (skill.description && !/ at (beginner|intermediate|advanced|expert) level[.]?$/i.test(skill.description)) {
+          details.append(node('span','skill-meta',skill.description));
+        }
         choice.append(checkbox(skill, 'catalog'), details);
         row.append(choice, preference(skill, result.revision));
         return row;
@@ -371,7 +378,7 @@ async function loadCatalog(retry = true) {
   state.catalogLoading = true;
   renderCatalog();
   try {
-    const params = new URLSearchParams({ agent: state.agent, category: state.category, query: state.query, page: state.page });
+    const params = new URLSearchParams({ agent: state.agent, category: state.category, query: state.query, page: state.page, lane: state.lane, filter: el('availability').value });
     const result = await api('/api/catalog?' + params);
     if (attempt !== state.catalogRequest) return;
     if (retry && result.revision < (state.revision ?? 0)) return loadCatalog(false);
@@ -400,7 +407,7 @@ async function loadWorkspace(directory, submitted = false, retry = true) {
   state.workspaceLoading = true;
   renderSuggestions();
   try {
-    const result = await api('/api/workspace', { directory, agent: state.agent || undefined });
+    const result = await api('/api/workspace', { directory, lane:state.lane, agent:state.agent || undefined });
     if (attempt !== state.workspaceRequest) return;
     if (retry && result.revision < (state.revision ?? 0)) return loadWorkspace(directory, submitted, false);
     state.workspace = result;
@@ -479,6 +486,8 @@ async function changeRecipe(recipe, removed) {
 }
 
 function pickCategories(groups) {
+  const select = el('catalog-category');
+  select.replaceChildren(new Option('All categories',''));
   for (const group of groups) {
     const options = node('optgroup');
     options.label = categoryName(group.family);
@@ -498,8 +507,62 @@ function applyFilters() {
   notice();
   state.query = el('catalog-query').value.trim();
   state.category = el('catalog-category').value;
+  paintTopics();
   state.page = 1;
   void loadCatalog();
+}
+
+const guide = el('welcome');
+function showGuide() {
+  if (!guide.open) guide.showModal();
+  el('explore').focus();
+}
+el('open-guide').addEventListener('click', showGuide);
+el('close-guide').addEventListener('click', () => guide.close());
+el('explore').addEventListener('click', () => { guide.close(); el('lane-coding').focus(); });
+el('availability').addEventListener('change', applyFilters);
+function groupsInLane() {
+  return state.groups.filter(group => !state.lane || (state.lane === 'work') === (group.family === 'work'));
+}
+function topicChip(title, key, active) {
+  const button = node('button', 'chip', title);
+  button.type = 'button';
+  button.setAttribute('aria-pressed', String(active));
+  button.addEventListener('click', () => {
+    el('catalog-category').value = key;
+    applyFilters();
+    [...document.querySelectorAll('.chips button')].find(item => item.dataset.value === key)?.focus({preventScroll:true});
+  });
+  button.dataset.value = key;
+  return button;
+}
+function paintTopics() {
+  const groups = groupsInLane();
+  const active = state.category.split('/')[0];
+  el('family-picker').replaceChildren(...(state.lane === 'work' ? [] : groups).map(group => topicChip(categoryName(group.family), group.family, active === group.family)));
+  const topics = groups.find(group => group.family === active)?.categories || [];
+  el('topic-picker').replaceChildren(...topics.map(key => topicChip(categoryName(key.split('/').at(-1)), key, key === state.category)));
+}
+function renderLanes() {
+  for (const lane of ['coding','work']) {
+    const groups = state.groups.filter(group => (lane === 'work') === (group.family === 'work'));
+    el('count-'+lane).textContent = number.format(groups.reduce((sum,group) => sum + group.count,0)) + ' files';
+    el('lane-'+lane).setAttribute('aria-pressed',String(state.lane === lane));
+  }
+  el('show-all').setAttribute('aria-pressed',String(!state.lane));
+  pickCategories(groupsInLane());
+  el('catalog-category').value = state.category;
+  paintTopics();
+}
+for (const [id,lane] of [['lane-coding','coding'],['lane-work','work'],['show-all','']]) {
+  el(id).addEventListener('click', () => {
+    state.lane = lane;
+    state.category = lane === 'work' ? 'work' : '';
+    state.page = 1;
+    state.query = el('catalog-query').value.trim();
+    renderLanes();
+    void Promise.all([loadCatalog(),loadWorkspace(state.directory)]);
+  });
 }
 
 el('catalog-form').addEventListener('submit', event => {
@@ -583,9 +646,11 @@ async function start() {
       option.value = agent;
       el('agent').append(option);
     }
-    pickCategories(project.categoryGroups);
+    state.groups = project.categoryGroups;
+    renderLanes();
     state.ready = true;
     updateControls();
+    void api('/api/welcome/claim', {}).then(result => { if (result.first) showGuide(); }).catch(() => {});
     await Promise.all([loadCatalog(), loadWorkspace('.'), loadLibrary()]);
   } catch (error) {
     notice(error.message);

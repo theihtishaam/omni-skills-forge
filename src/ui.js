@@ -74,7 +74,7 @@ export class OmniUI {
 
     switch (mode) {
       case 'all': {
-        const { confirm } = await inquirer.prompt([{ type: 'confirm', name: 'confirm', message: 'Copy all 50,009 skill files to the selected tool?', default: false }]);
+        const { confirm } = await inquirer.prompt([{ type: 'confirm', name: 'confirm', message: 'Copy the entire catalog of skill files to the selected tool?', default: false }]);
         if (confirm) await this.installer.installAll(opts);
         break;
       }

@@ -1,10 +1,10 @@
 # Catalog categories
 
-Omni Skills Forge includes **50,009 skill files in 28 category paths**. Each path below links to the shipped Markdown directory. Counts include difficulty variants and come from the [master registry](../registry/master-registry.json).
+Omni Skills Forge includes **50,012 skill files in 30 category paths**. Each path below links to the shipped Markdown directory. Counts include difficulty variants and come from the [master registry](../registry/master-registry.json).
 
-![Skill files across all six families.](../assets/categories.svg)
+![Skill files in the six engineering families.](../assets/categories.svg)
 
-Use `osf categories` to list the six families. Pass a family or exact path to `osf list --category`. For example, `osf list --category ai-ml/rag --json` returns the full list of retrieval-augmented generation files.
+Use `osf categories` to list the seven families. Pass a family or exact path to `osf list --category`. For example, `osf list --category ai-ml/rag --json` returns the full list of retrieval-augmented generation files.
 
 ## Backend
 
@@ -76,15 +76,22 @@ Use `osf categories` to list the six families. Pass a family or exact path to `o
 | [`database/nosql`](../skills/database/nosql) | 880 |
 | [`database/sql`](../skills/database/sql) | 1,601 |
 
+## Everyday work
+
+| Category | Skill files |
+| --- | ---: |
+| [Communication](../skills/work/communication) | 2 |
+| [Planning](../skills/work/planning) | 1 |
+
 ## Difficulty
 
 | Difficulty | Skill files |
 | --- | ---: |
-| Beginner | 12,500 |
-| Intermediate | 12,500 |
+| Beginner | 12,502 |
+| Intermediate | 12,501 |
 | Advanced | 12,500 |
 | Expert | 12,509 |
 
-The registry has **12,506 distinct names**. Inspect the file path and difficulty because names can repeat across variants.
+The registry has **12,509 distinct names**. Inspect the file path and difficulty because names can repeat across variants.
 
 [Quick start](../README.md#open-it-in-your-project) · [Source provenance](PROVENANCE.md)

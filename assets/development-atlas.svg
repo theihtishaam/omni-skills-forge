@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1080" height="658" viewBox="0 0 1080 658" role="img" aria-labelledby="atlas-title atlas-description">
   <title id="atlas-title">Development skill atlas</title>
-  <desc id="atlas-description">The catalog contains 50,009 Markdown skill files across 28 category paths. Backend, 12,962 files, covers REST API design and rate limiting. Web development, 12,002 files, covers React accessibility and form submission. AI and ML, 8,642 files, covers retrieval indexing and model evaluation. DevOps, 8,241 files, covers GitHub Actions and Kubernetes deployments. Cloud, 5,681 files, covers AWS IAM and Cloud Run. Database, 2,481 files, covers SQL indexing and MongoDB aggregation.</desc>
+  <desc id="atlas-description">The engineering collection contains 50,009 Markdown skill files across 28 category paths. Backend, 12,962 files, covers REST API design and rate limiting. Web development, 12,002 files, covers React accessibility and form submission. AI and ML, 8,642 files, covers retrieval indexing and model evaluation. DevOps, 8,241 files, covers GitHub Actions and Kubernetes deployments. Cloud, 5,681 files, covers AWS IAM and Cloud Run. Database, 2,481 files, covers SQL indexing and MongoDB aggregation.</desc>
   <!-- Counts are derived from the packaged registry/master-registry.json. Example sources are listed alongside each family below. -->
   <defs>
     <linearGradient id="atlas-background" x1="0" x2="1" y1="0" y2="1" gradientUnits="objectBoundingBox">
@@ -22,7 +22,7 @@
   <g font-family="Segoe UI, Arial, sans-serif">
     <path d="M40 36H90" stroke="#eab66e" stroke-width="4" stroke-linecap="round"/>
     <text x="40" y="82" fill="#f4f7ff" font-size="43" font-weight="730" letter-spacing="-.8">Development skill atlas</text>
-    <text x="1038" y="61" fill="#ffcf8b" font-size="25" font-weight="700" text-anchor="end">50,009 skill files</text>
+    <text x="1038" y="61" fill="#ffcf8b" font-size="25" font-weight="700" text-anchor="end">50,009 engineering files</text>
     <text x="1038" y="87" fill="#becfe4" font-size="19" text-anchor="end">28 category paths</text>
     <path class="guide" d="M40 111H1040M540 130V627M40 288H1040M40 459H1040"/>
 

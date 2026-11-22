@@ -30,8 +30,8 @@ async function projectFixture(t) {
 test('category policies expose exact paths and family exclusions without altering relevance', async t => {
   const project = await projectFixture(t);
   const { categories, families } = await loadSkillSelectionCatalog();
-  assert.equal(categories.length, 28);
-  assert.deepEqual(families, ['ai-ml', 'backend', 'cloud', 'database', 'devops', 'web-dev']);
+  assert.equal(categories.length, 30);
+  assert.deepEqual(families, ['ai-ml', 'backend', 'cloud', 'database', 'devops', 'web-dev', 'work']);
   await assert.rejects(setSkillCategoryState({ project, category: 'web-dev/invalid', status: 'enabled' }), {
     code: 'UNKNOWN_CATEGORY',
   });
